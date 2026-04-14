@@ -28,8 +28,11 @@ import {
   Trash,
   GripVertical,
   RotateCcw,
-  StopCircle
+  StopCircle,
+  ScanSearch,
+  Loader2
 } from "lucide-react";
+import { OCRImporterModal } from "@/components/dashboard/ocr-importer";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -388,6 +391,9 @@ export default function ExamBuilderPage() {
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
   
+  const [isOcrOpen, setIsOcrOpen] = useState(false);
+  const [globalProcessing, setGlobalProcessing] = useState(false);
+
   useEffect(() => {
     if (user?.collegeId && id) loadData(false, true);
   }, [user, id]);
@@ -522,6 +528,43 @@ export default function ExamBuilderPage() {
     setProcessing(false);
   }
 
+  async function handleOcrImportFinalize(parsedQuestions) {
+    setGlobalProcessing(true);
+    let successCount = 0;
+
+    for (const q of parsedQuestions) {
+       const payload = {
+          text: q.text,
+          type: q.type || 'SUBJECTIVE',
+          defaultMarks: q.defaultMarks || 2,
+          modelAnswer: q.modelAnswer || '',
+          options: q.options || [],
+          subjectId: exam.subjectId,
+          collegeId: user.collegeId,
+          creatorId: user.id
+       };
+
+       try {
+          const res = await orgClient.questions.create(payload);
+          if (res.success) {
+             const addRes = await orgClient.exams.addQuestion(id, { 
+                questionId: res.question.id, 
+                order: exam.questions.length + successCount, 
+                marks: res.question.defaultMarks 
+             });
+             if (addRes.success) successCount++;
+          }
+       } catch (e) {
+          console.error("Failed to inject & link", e);
+       }
+    }
+
+    toast.success(`Successfully committed ${successCount} OCR Extractions!`);
+    setIsOcrOpen(false);
+    setGlobalProcessing(false);
+    loadData(true);
+  }
+
   async function handleStart() {
     if (!confirm("Go LIVE? Exam will become active for students.")) return;
     setProcessing(true);
@@ -594,7 +637,25 @@ export default function ExamBuilderPage() {
     }
   }
 return (
-    <div className="space-y-6 container mx-auto pb-20 mt-8 px-4 md:px-0">
+    <div className="space-y-6 container mx-auto pb-20 mt-8 px-4 md:px-0 relative">
+      {(globalProcessing) && (
+        <div className="fixed inset-0 z-[110] bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center pointer-events-auto">
+           <div className="bg-white p-6 rounded-3xl shadow-2xl flex items-center gap-4 animate-in zoom-in-95 duration-200">
+              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+              <div className="flex flex-col">
+                 <span className="font-black text-slate-900 text-lg">Committing Neural Assets...</span>
+                 <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Please do not close this window</span>
+              </div>
+           </div>
+        </div>
+      )}
+
+      <OCRImporterModal 
+         isOpen={isOcrOpen} 
+         onClose={() => setIsOcrOpen(false)} 
+         onImportFinalize={handleOcrImportFinalize} 
+      />
+
       <QuestionComposer isOpen={isComposerOpen} onClose={() => setIsComposerOpen(false)} onSave={handleSaveQuestion} initialData={editingQuestion} processing={processing} />
 
       <DndContext 
@@ -742,7 +803,14 @@ return (
                    </h3>
                    <div className="flex items-center gap-3">
                       {exam.status === 'DRAFT' && (
-                         <Button onClick={() => { setEditingQuestion(null); setIsComposerOpen(true); }} className="h-10 px-4 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100 font-black text-[10px] uppercase tracking-widest flex gap-2"><PlusCircle className="w-4 h-4" /> Create Asset</Button>
+                         <>
+                           <Button onClick={() => setIsOcrOpen(true)} className="h-10 px-4 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black text-[10px] uppercase tracking-widest flex items-center gap-2 group transition-all shrink-0">
+                              <ScanSearch className="w-4 h-4 text-indigo-500 group-hover:scale-110 transition-transform" /> AI Import
+                           </Button>
+                           <Button onClick={() => { setEditingQuestion(null); setIsComposerOpen(true); }} className="h-10 px-4 rounded-xl bg-slate-100/50 hover:bg-slate-100 text-slate-700 border border-slate-200 font-black text-[10px] uppercase tracking-widest flex gap-2 shrink-0">
+                              <PlusCircle className="w-4 h-4" /> Create
+                           </Button>
+                         </>
                       )}
                       <Badge variant="secondary" className="font-black text-[10px] bg-indigo-50 text-indigo-700 px-4 py-1 rounded-full">{bankQuestions.length} Total</Badge>
                    </div>

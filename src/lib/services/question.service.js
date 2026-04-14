@@ -69,6 +69,7 @@ export async function getQuestionsByCollege(collegeId, filters = {}) {
     include: { 
       options: { orderBy: { order: 'asc' } },
       subject: { select: { name: true } },
+      creator: { select: { name: true } },
       exams: {
          include: {
             exam: { select: { title: true } }
