@@ -114,7 +114,7 @@ model CollegeRegistration {
   createdAt     DateTime  @default(now())
 
   // Relations (both nullable until provisioned)
-  college   College? @relation(fields: [collegeId], references: [id])
+  college   College? @relation(fields: [collegeId], references: [id], onDelete: Cascade)
   adminUser User?    @relation("RegistrationSourceUser", fields: [adminUserId], references: [id])
 }
 

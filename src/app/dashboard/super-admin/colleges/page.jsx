@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   School, MapPin, CheckCircle2, AlertTriangle, XCircle, Clock,
   Filter, Search, Loader2, ArrowLeft, ChevronRight,
-  ShieldOff, RefreshCw,
+  ShieldOff, RefreshCw, Trash2,
 } from "lucide-react";
 
 const STATUS_CONFIG = {
@@ -243,6 +243,16 @@ export default function CollegesPage() {
                         onClick={() => doAction(college.id, "RESTORE")}
                       />
                     )}
+
+                    <QuickActionButton
+                      label="Delete" icon={Trash2} variant="danger"
+                      loading={isActing}
+                      onClick={() => {
+                        if (confirm("Are you sure you want to PERMANENTLY delete this college and ALL its data (users, exams, questions, etc.)? This action cannot be undone.")) {
+                          doAction(college.id, "DELETE");
+                        }
+                      }}
+                    />
 
                     {/* Detail link */}
                     <Link

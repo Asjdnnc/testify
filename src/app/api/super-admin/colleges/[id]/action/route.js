@@ -18,7 +18,7 @@ async function requireSuperAdmin() {
 }
 
 // POST /api/super-admin/colleges/[id]/action
-// Super admin can only SUSPEND or RESTORE a college.
+// Super admin can SUSPEND, RESTORE or DELETE a college.
 // Cancellation is the college's own action via /api/account/cancel.
 export async function POST(req, { params }) {
   try {
@@ -41,15 +41,24 @@ export async function POST(req, { params }) {
       // Restore from: SUSPENDED, CANCELLED, TRIAL_EXPIRED, or soft-deleted
       update = {
         subscriptionStatus: "TRIAL_EXPIRED",
-        cancellationScheduledAt: null,
-        deletionScheduledAt: null,
+        scheduledDeletionAt: null,
         deletedAt: null,
         deletionReason: null,
       };
 
+      // Also remove any pending cancellation request
+      await prisma.cancellationRequest.deleteMany({
+        where: { collegeId: id }
+      });
+
+    } else if (action === "DELETE") {
+      // HARD DELETE — Cascades to users, exams, branches, etc. via schema rules
+      await prisma.college.delete({ where: { id } });
+      return Response.json({ success: true, message: "College and all related data deleted permanently" });
+
     } else {
       return Response.json(
-        { success: false, message: `Unknown action "${action}". Super admin can only SUSPEND or RESTORE.` },
+        { success: false, message: `Unknown action "${action}". Super admin can SUSPEND, RESTORE, or DELETE.` },
         { status: 400 }
       );
     }
