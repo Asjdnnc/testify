@@ -142,7 +142,7 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
     if (!scanFile) return;
 
     setIsScanningSingle(true);
-    const toastId = toast.loading("Magic at work: Scanning snippet...");
+    const toastId = toast.loading("Reading the image…");
     
     try {
       const fileBase64 = await fileToGenerativePart(scanFile);
@@ -165,7 +165,7 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
             ? q.options.map(o => ({ text: o.text, label: o.label, isCorrect: o.isCorrect, order: o.order }))
             : [{ text: "", label: "A", isCorrect: true, order: 0 }, { text: "", label: "B", isCorrect: false, order: 1 }]
         });
-        toast.success("AI extraction complete!", { id: toastId });
+        toast.success("Question filled in from the image — please review it", { id: toastId });
       } else {
         toast.error("AI couldn't find a question in that snippet.", { id: toastId });
       }
@@ -191,37 +191,37 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-      <Card className="w-full max-w-5xl max-h-[90vh] overflow-hidden shadow-2xl border-none rounded-[32px] flex flex-col bg-white dark:bg-slate-900 transition-colors">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+      <Card className="w-full max-w-5xl max-h-[90vh] overflow-hidden shadow-2xl border-none rounded-2xl flex flex-col bg-card transition-colors">
         
         {/* Header Section */}
-        <div className="p-8 pb-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col gap-6 shrink-0">
+        <div className="p-8 pb-6 border-b border-border bg-muted/30 flex flex-col gap-6 shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-               <div className="bg-indigo-600 p-2.5 rounded-2xl shadow-lg">
+               <div className="bg-primary p-2.5 rounded-2xl shadow-lg">
                   <PlusCircle className="w-6 h-6 text-white" />
                </div>
                <div>
-                  <h2 className="text-2xl font-black text-slate-800 dark:text-white">Add New Question</h2>
-                  <p className="text-slate-500 dark:text-slate-400 font-bold text-[10px] uppercase tracking-widest">Unified Contribution Hub</p>
+                  <h2 className="text-2xl font-semibold text-foreground">Add questions</h2>
+                  <p className="text-muted-foreground font-bold text-xs tracking-wide">Write a question, or import a whole paper with AI</p>
                </div>
             </div>
-            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full w-10 h-10 hover:bg-slate-200 dark:hover:bg-slate-800">
-               <X className="w-5 h-5 text-slate-500" />
+            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full w-10 h-10 hover:bg-muted dark:hover:bg-muted">
+               <X className="w-5 h-5 text-muted-foreground" />
             </Button>
           </div>
 
           <div className="flex flex-col md:flex-row md:items-center gap-6">
             {/* Subject Selection (Mandatory) */}
             <div className="flex-1 space-y-2">
-               <Label className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-widest pl-1">Target Subject</Label>
+               <Label className="text-xs font-semibold text-muted-foreground tracking-wide pl-1">Subject</Label>
                <select 
-                 className="w-full h-12 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 text-sm font-bold focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900/20 transition-all dark:text-white outline-none"
+                 className="w-full h-12 rounded-xl border border-border bg-card px-4 text-sm font-bold focus:ring-4 focus:ring-ring dark:focus:ring-ring transition-all outline-none"
                  value={subjectId}
                  onChange={(e) => setSubjectId(e.target.value)}
                  required
                >
-                 <option value="">-- Choose Subject --</option>
+                 <option value="">Select a subject</option>
                  {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                </select>
             </div>
@@ -229,21 +229,21 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
             {/* Tabs */}
             {!initialData && (
               <div className="flex-1 space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-widest pl-1">Contribution Type</Label>
-                <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                <Label className="text-xs font-semibold text-muted-foreground tracking-wide pl-1">Method</Label>
+                <div className="flex p-1 bg-muted rounded-xl">
                   <button 
                     disabled={step === 'REVIEW'}
                     onClick={() => setActiveTab("SINGLE")}
-                    className={`flex-1 py-2.5 rounded-lg text-xs font-black uppercase transition-all ${activeTab === "SINGLE" ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                    className={`flex-1 py-2.5 rounded-lg text-xs font-semibold  transition-all ${activeTab === "SINGLE" ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground dark:hover:text-muted-foreground'}`}
                   >
-                    Single Question
+                    Write one
                   </button>
                   <button 
                     disabled={step === 'REVIEW'}
                     onClick={() => setActiveTab("BATCH")}
-                    className={`flex-1 py-2.5 rounded-lg text-xs font-black uppercase transition-all flex items-center justify-center gap-2 ${activeTab === "BATCH" ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                    className={`flex-1 py-2.5 rounded-lg text-xs font-semibold  transition-all flex items-center justify-center gap-2 ${activeTab === "BATCH" ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground dark:hover:text-muted-foreground'}`}
                   >
-                    Batch (AI Import)
+                    Import with AI
                   </button>
                 </div>
               </div>
@@ -252,20 +252,20 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
         </div>
 
         {/* Dynamic Body */}
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar dark:text-slate-300">
+        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
           {!subjectId && !initialData? (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-40 grayscale">
                <Layers className="w-16 h-16" />
-               <h3 className="text-xl font-bold">Select a subject to unlock contribution tools</h3>
-               <p className="text-sm max-w-xs">Each question must be mapped to an academic discipline for proper categorization.</p>
+               <h3 className="text-xl font-bold">Choose a subject to get started</h3>
+               <p className="text-sm max-w-xs">Questions are organised by subject so teachers can find and reuse them.</p>
             </div>
           ) : activeTab === "SINGLE" ? (
             <div className="grid lg:grid-cols-2 gap-8 animate-in slide-in-from-bottom-4 duration-300">
                {/* Manual Form Left */}
                <div className="space-y-6">
                   <div className="space-y-2">
-                     <Label className="font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
-                        <HelpCircle className="w-4 h-4 text-indigo-600" /> Question Type
+                     <Label className="font-bold flex items-center gap-2 text-foreground">
+                        <HelpCircle className="w-4 h-4 text-primary" /> Question Type
                      </Label>
                      <div className="grid grid-cols-3 gap-2">
                         {["MCQ_SINGLE", "MCQ_MULTIPLE", "SUBJECTIVE"].map(type => (
@@ -273,23 +273,23 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
                               key={type}
                               type="button"
                               onClick={() => setSingleFormData({...singleFormData, type})}
-                              className={`px-2 py-3 rounded-xl text-[9px] font-black uppercase transition-all border-2 ${
+                              className={`px-2 py-3 rounded-xl text-[11px] font-semibold  transition-all border-2 ${
                                  singleFormData.type === type 
-                                 ? "bg-indigo-600 text-white border-indigo-600 shadow-md" 
-                                 : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                 ? "bg-primary text-white border-primary shadow-md" 
+                                 : "bg-muted/50 border-border text-muted-foreground hover:bg-muted dark:hover:bg-muted"
                               }`}
                            >
-                              {type.replace('_', ' ')}
+                              {{ MCQ_SINGLE: "Single choice", MCQ_MULTIPLE: "Multiple choice", SUBJECTIVE: "Written" }[type]}
                            </button>
                         ))}
                      </div>
                   </div>
 
                   <div className="space-y-2">
-                     <Label className="font-bold text-slate-800 dark:text-slate-200">Default Marks</Label>
+                     <Label className="font-bold text-foreground">Marks</Label>
                      <Input 
                         type="number" 
-                        className="h-12 rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 dark:text-white" 
+                        className="h-12 rounded-xl border-border bg-card" 
                         value={singleFormData.defaultMarks}
                         onChange={(e) => setSingleFormData({...singleFormData, defaultMarks: e.target.value})}
                      />
@@ -297,7 +297,7 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                       <Label className="font-bold text-slate-800 dark:text-slate-200">Question Content</Label>
+                       <Label className="font-bold text-foreground">Question</Label>
                        <div className="flex items-center gap-2">
                           <input 
                              type="file" 
@@ -312,20 +312,20 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
                              size="sm" 
                              onClick={() => singleScanInputRef.current?.click()}
                              disabled={isScanningSingle}
-                             className="h-8 rounded-lg text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 flex items-center gap-2"
+                             className="h-8 rounded-lg text-xs font-semibold tracking-wide text-primary bg-primary/10 hover:bg-primary/10 dark:hover:bg-indigo-900/50 flex items-center gap-2"
                           >
                              {isScanningSingle ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
                              ) : (
                                 <Scan className="w-3 h-3" />
                              )}
-                             AI Scan Snippet
+                             Scan from image
                           </Button>
                        </div>
                     </div>
                     <textarea 
-                      className="w-full h-40 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 py-4 text-sm focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900/20 transition-all outline-none dark:text-white"
-                      placeholder="Type your question statement here..."
+                      className="w-full h-40 rounded-2xl border border-border bg-card px-4 py-4 text-sm focus:ring-4 focus:ring-ring dark:focus:ring-ring transition-all outline-none"
+                      placeholder="Type the question students will see…"
                       value={singleFormData.text}
                       onChange={(e) => setSingleFormData({...singleFormData, text: e.target.value})}
                     />
@@ -337,9 +337,9 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
                   {singleFormData.type !== "SUBJECTIVE" ? (
                     <div className="space-y-4">
                        <div className="flex items-center justify-between">
-                          <Label className="font-bold text-slate-800 dark:text-slate-200">Options</Label>
-                          <Button type="button" variant="outline" size="sm" onClick={handleAddOption} className="rounded-full h-8 text-[10px] uppercase font-black tracking-widest border-indigo-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-400">
-                             <Plus className="w-3 h-3 mr-1" /> Add Choice
+                          <Label className="font-bold text-foreground">Options</Label>
+                          <Button type="button" variant="outline" size="sm" onClick={handleAddOption} className="rounded-full h-8 text-xs font-semibold tracking-wide border-primary/30 text-primary">
+                             <Plus className="w-3 h-3 mr-1" /> Add option
                           </Button>
                        </div>
                        <div className="grid gap-3">
@@ -349,19 +349,19 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
                                type="button"
                                onClick={() => handleOptionChange(i, 'isCorrect', !opt.isCorrect)}
                                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border-2 transition-all ${
-                                 opt.isCorrect ? "bg-emerald-600 border-emerald-600 text-white shadow-lg" : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-400"
+                                 opt.isCorrect ? "bg-emerald-600 border-success/40 text-white shadow-lg" : "bg-muted/50 border-border text-muted-foreground"
                                }`}
                              >
-                                {opt.isCorrect ? <CheckCircle2 className="w-5 h-5" /> : <span className="text-xs font-black">{opt.label}</span>}
+                                {opt.isCorrect ? <CheckCircle2 className="w-5 h-5" /> : <span className="text-xs font-semibold">{opt.label}</span>}
                              </button>
                              <Input 
                                placeholder={`Option text...`}
-                               className="h-11 rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 dark:text-white"
+                               className="h-11 rounded-xl border-border bg-card"
                                value={opt.text}
                                onChange={(e) => handleOptionChange(i, 'text', e.target.value)}
                              />
                              {singleFormData.options.length > 2 && (
-                               <Button variant="ghost" size="icon" onClick={() => handleRemoveOption(i)} className="text-slate-400 hover:text-rose-600 rounded-full h-8 w-8">
+                               <Button variant="ghost" size="icon" onClick={() => handleRemoveOption(i)} className="text-muted-foreground hover:text-destructive rounded-full h-8 w-8">
                                  <Trash2 className="w-4 h-4" />
                                </Button>
                              )}
@@ -371,10 +371,10 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <Label className="font-bold text-slate-800 dark:text-slate-200">Model Answer (Reference)</Label>
+                      <Label className="font-bold text-foreground">Model answer (teachers only)</Label>
                       <textarea 
-                        className="w-full h-64 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 py-4 text-sm focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900/20 transition-all outline-none dark:text-white"
-                        placeholder="Gold-standard answer for grading..."
+                        className="w-full h-64 rounded-2xl border border-border bg-card px-4 py-4 text-sm focus:ring-4 focus:ring-ring dark:focus:ring-ring transition-all outline-none"
+                        placeholder="Key points a full-marks answer should cover…"
                         value={singleFormData.modelAnswer}
                         onChange={(e) => setSingleFormData({...singleFormData, modelAnswer: e.target.value})}
                       />
@@ -393,22 +393,22 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
                            if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
                         }}
                         onClick={() => fileInputRef.current?.click()}
-                        className={`w-full aspect-square rounded-[40px] border-4 border-dashed transition-all flex flex-col items-center justify-center cursor-pointer group hover:bg-indigo-50 dark:hover:bg-indigo-950/20 hover:border-indigo-400 ${
-                           file ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50'
+                        className={`w-full aspect-square rounded-2xl border-4 border-dashed transition-all flex flex-col items-center justify-center cursor-pointer group hover:bg-primary/10 dark:hover:bg-indigo-950/20 hover:border-primary/30 ${
+                           file ? 'border-success/40 bg-success/12 dark:bg-emerald-950/20' : 'border-border bg-muted/50'
                         }`}
                      >
                         <input type="file" className="hidden" ref={fileInputRef} accept=".pdf,image/*" onChange={e => setFile(e.target.files[0])} />
                         {file ? (
                            <div className="space-y-3">
-                              <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
-                              <h4 className="font-black text-slate-800 dark:text-white">{file.name}</h4>
-                              <p className="text-[10px] font-bold uppercase text-slate-400">{(file.size/1024/1024).toFixed(2)} MB • Ready to Scan</p>
+                              <CheckCircle2 className="w-16 h-16 text-success-foreground mx-auto" />
+                              <h4 className="font-semibold text-foreground">{file.name}</h4>
+                              <p className="text-xs font-bold text-muted-foreground">{(file.size/1024/1024).toFixed(2)} MB • Ready to Scan</p>
                            </div>
                         ) : (
                            <div className="space-y-3">
-                              <UploadCloud className="w-16 h-16 text-slate-300 group-hover:text-indigo-500 transition-colors mx-auto" />
-                              <h4 className="font-black text-slate-800 dark:text-white">Click to Upload Document</h4>
-                              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Supports PDFs & Images</p>
+                              <UploadCloud className="w-16 h-16 text-muted-foreground group-hover:text-primary transition-colors mx-auto" />
+                              <h4 className="font-semibold text-foreground">Click to upload a question paper</h4>
+                              <p className="text-xs font-bold text-muted-foreground tracking-wide">PDF, PNG or JPG · up to 10 MB</p>
                            </div>
                         )}
                      </div>
@@ -416,32 +416,32 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
                      <Button 
                        onClick={handleOcrUpload}
                        disabled={!file || isProcessing}
-                       className="w-full h-16 rounded-[24px] bg-slate-900 border-b-4 border-slate-700 hover:bg-slate-800 text-white font-black text-lg shadow-2xl transition-all active:scale-95 active:border-b-0"
+                       className="w-full h-16 rounded-xl bg-foreground border-border hover:bg-foreground/90 text-background font-semibold text-lg shadow-2xl transition-all active:scale-95 active:border-b-0"
                      >
-                        {isProcessing ? <><Loader2 className="w-6 h-6 mr-2 animate-spin text-indigo-400" /> Neural Scanning...</> : "Import Questions with AI"}
+                        {isProcessing ? <><Loader2 className="w-6 h-6 mr-2 animate-spin text-primary" /> Reading document…</> : "Import Questions with AI"}
                      </Button>
                   </div>
                ) : (
                   <div className="grid gap-4">
                      {parsedQuestions.map((q, idx) => (
-                       <div key={idx} className="relative p-6 rounded-[24px] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-sm group">
+                       <div key={idx} className="relative p-6 rounded-xl bg-muted/50 border border-border shadow-sm group">
                           <Button size="icon" variant="ghost" onClick={() => {
                              const updated = [...parsedQuestions];
                              updated.splice(idx, 1);
                              setParsedQuestions(updated);
-                          }} className="absolute top-4 right-4 h-8 w-8 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4" /></Button>
+                          }} className="absolute top-4 right-4 h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4" /></Button>
                           
                           <div className="flex items-center gap-3 mb-4">
-                             <Badge variant="outline" className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-[9px] font-black uppercase text-indigo-600 dark:text-indigo-400 py-1">{q.type.replace('_', ' ')}</Badge>
-                             <div className="flex items-center bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
-                                <button disabled={q.defaultMarks <= 1} onClick={()=>{const u=[...parsedQuestions]; u[idx].defaultMarks--; setParsedQuestions(u)}} className="px-2 py-1 text-slate-400 hover:text-slate-800 dark:hover:text-white disabled:opacity-30">-</button>
-                                <span className="text-[10px] font-black px-2 min-w-[50px] text-center dark:text-white">{q.defaultMarks} Marks</span>
-                                <button onClick={()=>{const u=[...parsedQuestions]; u[idx].defaultMarks++; setParsedQuestions(u)}} className="px-2 py-1 text-slate-400 hover:text-slate-800 dark:hover:text-white">+</button>
+                             <Badge variant="outline" className="bg-card border-border text-[11px] font-semibold text-primary py-1">{q.type.replace('_', ' ')}</Badge>
+                             <div className="flex items-center bg-card rounded-lg border border-border overflow-hidden">
+                                <button disabled={q.defaultMarks <= 1} onClick={()=>{const u=[...parsedQuestions]; u[idx].defaultMarks--; setParsedQuestions(u)}} className="px-2 py-1 text-muted-foreground hover:text-foreground dark:hover:text-white disabled:opacity-30">-</button>
+                                <span className="text-xs font-semibold px-2 min-w-[50px] text-center">{q.defaultMarks} Marks</span>
+                                <button onClick={()=>{const u=[...parsedQuestions]; u[idx].defaultMarks++; setParsedQuestions(u)}} className="px-2 py-1 text-muted-foreground hover:text-foreground dark:hover:text-white">+</button>
                              </div>
                           </div>
 
                           <textarea 
-                             className="w-full text-lg font-bold text-slate-800 dark:text-white border-none bg-transparent resize-none p-0 focus:ring-0 outline-none leading-tight" 
+                             className="w-full text-lg font-bold text-foreground border-none bg-transparent resize-none p-0 focus:ring-0 outline-none leading-tight" 
                              value={q.text} 
                              onChange={(e) => {
                                 const updated = [...parsedQuestions];
@@ -454,8 +454,8 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
                           {q.type.includes("MCQ") && q.options && (
                              <div className="mt-4 grid grid-cols-2 gap-2">
                                 {q.options.map((opt, oIdx) => (
-                                   <div key={oIdx} className={`p-3 rounded-2xl text-xs font-bold flex items-center gap-3 border ${opt.isCorrect ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900 text-emerald-900 dark:text-emerald-400' : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-500'}`}>
-                                      <div className="w-5 h-5 rounded flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-[9px] cursor-pointer" onClick={() => {
+                                   <div key={oIdx} className={`p-3 rounded-2xl text-xs font-bold flex items-center gap-3 border ${opt.isCorrect ? 'bg-success/12 dark:bg-emerald-950/20 border-success/40 dark:border-success/40 text-success-foreground dark:text-success-foreground' : 'bg-card border-border text-muted-foreground'}`}>
+                                      <div className="w-5 h-5 rounded flex items-center justify-center bg-muted text-[11px] cursor-pointer" onClick={() => {
                                          const u = [...parsedQuestions];
                                          if(q.type === 'MCQ_SINGLE') u[idx].options.forEach(o => o.isCorrect = false);
                                          u[idx].options[oIdx].isCorrect = !u[idx].options[oIdx].isCorrect;
@@ -479,9 +479,9 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 shrink-0 flex items-center justify-between">
+        <div className="p-6 border-t border-border bg-muted/50 shrink-0 flex items-center justify-between">
            {step === "REVIEW" ? (
-              <Button variant="ghost" className="h-12 rounded-xl font-bold uppercase text-[10px] tracking-widest text-slate-500" onClick={() => {setStep("UPLOAD"); setParsedQuestions([]); setFile(null);}}>
+              <Button variant="ghost" className="h-12 rounded-xl font-bold text-xs tracking-wide text-muted-foreground" onClick={() => {setStep("UPLOAD"); setParsedQuestions([]); setFile(null);}}>
                  Discard Scan
               </Button>
            ) : (
@@ -490,9 +490,9 @@ export function QuestionContributionModal({ isOpen, onClose, subjects, onFinaliz
            <Button 
              onClick={handleFinalize} 
              disabled={!subjectId || (activeTab === "SINGLE" && !singleFormData.text) || (activeTab === "BATCH" && parsedQuestions.length === 0)}
-             className="h-12 px-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-[11px] shadow-xl transition-all active:scale-95 disabled:grayscale disabled:opacity-50"
+             className="h-12 px-10 rounded-xl bg-primary hover:bg-primary text-white font-semibold tracking-wide text-[11px] shadow-xl transition-all active:scale-95 disabled:grayscale disabled:opacity-50"
            >
-              {initialData ? "Save Changes" : activeTab === "BATCH" ? `Save ${parsedQuestions.length} AI Extractions` : "Save Individual Question"}
+              {initialData ? "Save changes" : activeTab === "BATCH" ? `Save ${parsedQuestions.length} AI Extractions` : "Save question"}
            </Button>
         </div>
       </Card>

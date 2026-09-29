@@ -1,5 +1,5 @@
 import { createTeachersBatch, createStudentsBatch } from "@/lib/services/org.service.js";
-import jwt from "jsonwebtoken";
+import { requireAuth, errorResponse } from "@/lib/server-auth.js";
 import * as XLSX from "xlsx";
 
 /**
@@ -10,16 +10,15 @@ import * as XLSX from "xlsx";
 export async function POST(req) {
   try {
     // 1. Auth Check
-    const token = req.headers.get("Authorization")?.split(" ")[1] || req.cookies.get("token")?.value;
-    if (!token) return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.role !== "ADMIN") return Response.json({ success: false, message: "Forbidden" }, { status: 403 });
+    const decoded = await requireAuth(req, { roles: ["ADMIN"], subscription: true });
 
     // 2. Parse FormData
     const formData = await req.formData();
     const file = formData.get("file");
     const role = formData.get("role") || "TEACHER"; // Default to teacher for backward compatibility
+    if (role !== "TEACHER" && role !== "STUDENT") {
+      return Response.json({ success: false, message: "Invalid role" }, { status: 400 });
+    }
 
     if (!file) {
       return Response.json({ success: false, message: "No file uploaded" }, { status: 400 });
@@ -80,10 +79,6 @@ export async function POST(req) {
     });
 
   } catch (error) {
-    console.error("[BATCH_UPLOAD_API_ERROR]", error);
-    return Response.json({
-      success: false,
-      message: error.message || "An error occurred during batch processing"
-    }, { status: 500 });
+    return errorResponse(error, 500);
   }
 }

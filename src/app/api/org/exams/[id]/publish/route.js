@@ -1,27 +1,16 @@
 import { publishExam } from "@/lib/services/exam.service";
-import { cookies } from "next/headers";
-
-async function getAuthContext() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("testify-token")?.value;
-  if (!token) return null;
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-    return payload;
-  } catch (e) { return null; }
-}
+import { requireAuth, errorResponse } from "@/lib/server-auth.js";
 
 export async function POST(req, { params }) {
   try {
-    const auth = await getAuthContext();
-    if (!auth) return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    const auth = await requireAuth(req, { roles: ["TEACHER", "ADMIN"], subscription: true });
 
     const { id } = await params;
-    const body = await req.json(); // contains { startTime, endTime }
+    const body = await req.json().catch(() => ({})); // contains { startTime, endTime }
 
     const exam = await publishExam(auth.userId, id, body);
     return Response.json({ success: true, exam });
   } catch (error) {
-    return Response.json({ success: false, message: error.message }, { status: 400 });
+    return errorResponse(error);
   }
 }

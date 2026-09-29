@@ -138,11 +138,11 @@ export function LoginForm() {
 
       {/* Footer link */}
       <p className="mt-8 text-center text-sm text-testify-muted">
-        Don&apos;t have an account?{" "}
-        <Link href="/register" className="text-testify-accent hover:text-testify-accent2 font-semibold transition-colors">
-          Create one →
+        Don&apos;t have an account? Ask your institution admin, or{" "}
+        <Link href="/get-started" className="text-testify-accent hover:text-testify-accent2 font-semibold transition-colors">
+          register your college →
         </Link>
       </p>
     </div>
   );
-}
+}

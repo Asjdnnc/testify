@@ -49,8 +49,8 @@ export default function ForcePasswordChange() {
     return (
       <div className="fixed inset-0 z-[100] bg-background flex items-center justify-center p-6 text-center">
         <div className="max-w-sm w-full space-y-6 animate-in fade-in zoom-in duration-300">
-          <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto">
-            <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+          <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-success/40 flex items-center justify-center mx-auto">
+            <CheckCircle2 className="w-8 h-8 text-success-foreground" />
           </div>
           <div className="space-y-2">
             <h2 className="text-2xl font-bold text-foreground">Security Updated</h2>
@@ -59,9 +59,9 @@ export default function ForcePasswordChange() {
             </p>
           </div>
           <div className="flex justify-center gap-1.5 pt-2">
-            <div className="w-2 h-2 rounded-full bg-primary animate-bounce delay-0" />
-            <div className="w-2 h-2 rounded-full bg-primary animate-bounce delay-150" />
-            <div className="w-2 h-2 rounded-full bg-primary animate-bounce delay-300" />
+            <div className="w-2 h-2 rounded-full bg-primary delay-0" />
+            <div className="w-2 h-2 rounded-full bg-primary delay-150" />
+            <div className="w-2 h-2 rounded-full bg-primary delay-300" />
           </div>
         </div>
       </div>
@@ -70,7 +70,7 @@ export default function ForcePasswordChange() {
 
   return (
     <div className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-md flex items-center justify-center p-6">
-      <div className="bg-card border rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-500">
+      <div className="bg-card border rounded-2xl p-8 max-w-md w-full shadow-2xl space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-500">
         <div className="space-y-3 text-center">
           <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto rotate-12 group-hover:rotate-0 transition-transform">
             <ShieldAlert className="w-7 h-7 text-primary" />
@@ -91,7 +91,7 @@ export default function ForcePasswordChange() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest pl-1">
+            <label className="text-xs font-semibold text-muted-foreground tracking-wide pl-1">
               New Password
             </label>
             <div className="relative group">
@@ -118,14 +118,14 @@ export default function ForcePasswordChange() {
               {[1, 2, 3, 4].map((level) => (
                 <div 
                   key={level} 
-                  className={`h-1 flex-1 rounded-full transition-all duration-500 ${password.length >= level * 2 ? (password.length > 10 ? 'bg-emerald-500' : 'bg-primary') : 'bg-muted'}`} 
+                  className={`h-1 flex-1 rounded-full transition-all duration-500 ${password.length >= level * 2 ? (password.length > 10 ? 'bg-success' : 'bg-primary') : 'bg-muted'}`} 
                 />
               ))}
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest pl-1">
+            <label className="text-xs font-semibold text-muted-foreground tracking-wide pl-1">
               Confirm New Password
             </label>
             <div className="relative group">
@@ -151,7 +151,7 @@ export default function ForcePasswordChange() {
           </button>
         </form>
 
-        <p className="text-[10px] text-center text-muted-foreground leading-relaxed px-4">
+        <p className="text-xs text-center text-muted-foreground leading-relaxed px-4">
           By activating your account, you agree to our terms of service and institutional data security protocols.
         </p>
       </div>

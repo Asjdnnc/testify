@@ -1,4 +1,12 @@
 import { CRON_JOBS } from "@/lib/services/cron.service.js";
+import { timingSafeEqual } from "crypto";
+
+function secretsMatch(a, b) {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
+}
 
 // GET|POST /api/cron/[job]
 // Protected by Authorization: Bearer CRON_SECRET
@@ -9,7 +17,7 @@ async function runJob(req, { params }) {
   const authHeader = req.headers.get("authorization") || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
-  if (!token || token !== process.env.CRON_SECRET) {
+  if (!secretsMatch(token, process.env.CRON_SECRET)) {
     return Response.json(
       { success: false, message: "Unauthorized — invalid or missing CRON_SECRET" },
       { status: 401 }
@@ -20,7 +28,7 @@ async function runJob(req, { params }) {
   const { job } = await params;
   const jobFn = CRON_JOBS[job];
 
-  if (!jobFn) {
+  if (!Object.hasOwn(CRON_JOBS, job) || !jobFn) {
     return Response.json(
       {
         success: false,
@@ -46,7 +54,7 @@ async function runJob(req, { params }) {
   } catch (error) {
     console.error(`[CRON] ${job} failed:`, error);
     return Response.json(
-      { success: false, job, message: error.message },
+      { success: false, job, message: "Job failed" },
       { status: 500 }
     );
   }

@@ -1,14 +1,44 @@
 import prisma from "../prisma.js";
 import { autoGradeAttempt } from "./grading.service.js";
 import { checkResourceLimit } from "./subscription.service.js";
+import { studentCanAccessExam } from "./attempt.service.js";
+
+// --- Tenant validation ---
+// Every id that comes from the request body must belong to the caller's college.
+async function assertCollegeRefs(collegeId, { subjectId, branchId, batchId }) {
+  if (subjectId) {
+    const subject = await prisma.subject.findUnique({ where: { id: subjectId }, select: { collegeId: true } });
+    if (!subject || subject.collegeId !== collegeId) throw new Error("Invalid subject");
+  }
+  if (branchId) {
+    const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { collegeId: true } });
+    if (!branch || branch.collegeId !== collegeId) throw new Error("Invalid branch");
+  }
+  if (batchId) {
+    const batch = await prisma.batch.findUnique({
+      where: { id: batchId },
+      select: { branchId: true, branch: { select: { collegeId: true } } }
+    });
+    if (!batch || batch.branch.collegeId !== collegeId) throw new Error("Invalid batch");
+    if (branchId && batch.branchId !== branchId) throw new Error("Batch does not belong to the selected branch");
+  }
+}
+
+function toInt(value, fallback = undefined) {
+  const n = parseInt(value, 10);
+  return Number.isNaN(n) ? fallback : n;
+}
 
 // --- Collision Detection ---
 async function checkSchedulingConflict(targetBatchId, targetStartTime, targetEndTime, currentExamId) {
+  if (targetStartTime && targetEndTime && targetEndTime <= targetStartTime) {
+    throw new Error("End time must be after start time");
+  }
   if (!targetBatchId || !targetStartTime || !targetEndTime) return;
 
   const conflictingExam = await prisma.exam.findFirst({
     where: {
-      id: { not: currentExamId },
+      ...(currentExamId ? { id: { not: currentExamId } } : {}),
       access: {
         some: { batchId: targetBatchId }
       },
@@ -33,9 +63,16 @@ export async function createDraftExam(teacherId, data) {
 
   // Authorize teacher
   const teacher = await prisma.user.findUnique({ where: { id: teacherId } });
-  if (!teacher || (teacher.role !== "TEACHER" && teacher.role !== "ADMIN")) {
+  if (!teacher || (teacher.role !== "TEACHER" && teacher.role !== "ADMIN") || teacher.collegeId !== collegeId) {
     throw new Error("Forbidden: Only teachers can create exams");
   }
+
+  const parsedDuration = toInt(duration);
+  const parsedTotal = toInt(totalMarks);
+  if (!parsedDuration || parsedDuration <= 0) throw new Error("Duration must be a positive number of minutes");
+  if (!parsedTotal || parsedTotal <= 0) throw new Error("Total marks must be a positive number");
+
+  await assertCollegeRefs(collegeId, { subjectId, branchId, batchId });
 
   // Enforce plan limits
   await checkResourceLimit(collegeId, "exams");
@@ -44,10 +81,10 @@ export async function createDraftExam(teacherId, data) {
     data: {
       title,
       description,
-      semester: semester ? parseInt(semester, 10) : null,
-      duration: parseInt(duration, 10),
-      totalMarks: parseInt(totalMarks, 10),
-      passingMarks: passingMarks ? parseInt(passingMarks, 10) : null,
+      semester: toInt(semester, null),
+      duration: parsedDuration,
+      totalMarks: parsedTotal,
+      passingMarks: toInt(passingMarks, null),
       status: "DRAFT", // always draft on creation
       collegeId,
       subjectId,
@@ -74,17 +111,22 @@ export async function addQuestionToExam(teacherId, examId, questionId, order, ma
     where: { id: questionId },
     include: { options: true }
   });
-  if (!question) throw new Error("Question not found");
+  // Tenant isolation: only questions from the exam's own college bank
+  if (!question || question.collegeId !== exam.collegeId) throw new Error("Question not found");
 
   // Generate initial snapshot
   const correctAnswers = question.options.filter(o => o.isCorrect).map(o => o.label);
+
+  const finalOrder = toInt(order, await prisma.examQuestion.count({ where: { examId } }));
+  const finalMarks = toInt(marks, question.defaultMarks);
+  if (finalMarks < 0) throw new Error("Marks cannot be negative");
   
   return prisma.examQuestion.create({
     data: {
       examId,
       questionId,
-      order,
-      marks,
+      order: finalOrder,
+      marks: finalMarks,
       questionTextSnapshot: question.text,
       optionsSnapshot: JSON.stringify(question.options),
       correctAnswersSnapshot: correctAnswers
@@ -117,8 +159,8 @@ export async function reorderExamQuestions(teacherId, examId, orderedIds) {
   );
 }
 
-export async function publishExam(teacherId, examId, timestamps) {
-  const { startTime, endTime } = timestamps;
+export async function publishExam(teacherId, examId, timestamps = {}) {
+  const { startTime, endTime } = timestamps || {};
   
   const exam = await prisma.exam.findUnique({
     where: { id: examId },
@@ -131,6 +173,8 @@ export async function publishExam(teacherId, examId, timestamps) {
   if (!exam || exam.creatorId !== teacherId) throw new Error("Forbidden: Not your exam");
   if (exam.status !== "DRAFT") throw new Error("Exam is already published or live");
   if (exam.questions.length === 0) throw new Error("Cannot publish an exam with zero questions");
+  if (startTime && Number.isNaN(new Date(startTime).getTime())) throw new Error("Invalid start time");
+  if (endTime && Number.isNaN(new Date(endTime).getTime())) throw new Error("Invalid end time");
 
   const targetBatchId = exam.access.length > 0 ? exam.access[0].batchId : null;
   const targetStartTime = startTime ? new Date(startTime) : exam.startTime;
@@ -172,8 +216,8 @@ export async function publishExam(teacherId, examId, timestamps) {
  * when their source question is updated. 
  * This allows "hot-fixes" for typos/clarifications before students start.
  */
-export async function syncExamSnapshots(questionId) {
-  const linkedExamQuestions = await prisma.examQuestion.findMany({
+export async function syncExamSnapshots(questionId, client = prisma) {
+  const linkedExamQuestions = await client.examQuestion.findMany({
     where: { 
       questionId,
       exam: { status: 'PUBLISHED' } 
@@ -181,29 +225,26 @@ export async function syncExamSnapshots(questionId) {
     include: { question: { include: { options: true } } }
   });
 
-  if (linkedExamQuestions.length === 0) return;
+  for (const eq of linkedExamQuestions) {
+    const liveQuestion = eq.question;
+    const liveCorrect = liveQuestion.options.filter(o => o.isCorrect).map(o => o.label);
 
-  await prisma.$transaction(
-    linkedExamQuestions.map((eq) => {
-      const liveQuestion = eq.question;
-      const liveCorrect = liveQuestion.options.filter(o => o.isCorrect).map(o => o.label);
-
-      return prisma.examQuestion.update({
-        where: { examId_questionId: { examId: eq.examId, questionId: eq.questionId } },
-        data: {
-          questionTextSnapshot: liveQuestion.text,
-          optionsSnapshot: JSON.stringify(liveQuestion.options),
-          correctAnswersSnapshot: liveCorrect
-        }
-      });
-    })
-  );
+    await client.examQuestion.update({
+      where: { examId_questionId: { examId: eq.examId, questionId: eq.questionId } },
+      data: {
+        questionTextSnapshot: liveQuestion.text,
+        optionsSnapshot: JSON.stringify(liveQuestion.options),
+        correctAnswersSnapshot: liveCorrect
+      }
+    });
+  }
 }
 
 // --- Access Management ---
 export async function grantExamAccess(teacherId, examId, targetId, isBatch = true) {
   const exam = await prisma.exam.findUnique({ where: { id: examId } });
   if (!exam || exam.creatorId !== teacherId) throw new Error("Forbidden");
+  await assertCollegeRefs(exam.collegeId, isBatch ? { batchId: targetId } : { branchId: targetId });
 
   return prisma.examAccess.create({
      data: {
@@ -296,57 +337,69 @@ export async function getExamForStudent(id, studentId) {
 
   if (!exam || exam.status === 'DRAFT') throw new Error("Exam not available");
 
-  // Verify access targeting
-  const hasAccess = exam.access.some(acc => 
-    (acc.batchId === user.batchId) || 
-    (acc.branchId === user.branchId && !acc.batchId) || 
-    (!acc.branchId && !acc.batchId)
-  );
+  // Verify tenant + cohort targeting (both must pass)
+  if (!studentCanAccessExam(exam, user)) throw new Error("Unauthorized");
 
-  if (!hasAccess && exam.collegeId !== user.collegeId) throw new Error("Unauthorized");
+  // Questions are only revealed once the student has a live attempt — the
+  // lobby only needs metadata, and this stops question-paper leaks before
+  // the exam window opens.
+  const liveAttempt = await prisma.attempt.findFirst({
+    where: { examId: id, userId: studentId, status: 'IN_PROGRESS' },
+    select: { id: true }
+  });
+
+  const { access: _, questions, ...examMeta } = exam;
+
+  if (!liveAttempt) {
+    return { ...examMeta, questionCount: questions.length, questions: [] };
+  }
 
   // Strip sensitive info & apply shuffling
-  let questionsToProcess = [...exam.questions];
-  
+  let questionsToProcess = [...questions];
+
   // 1. Shuffle Questions if enabled
   if (exam.shuffleQuestions) {
      questionsToProcess = seededShuffle(questionsToProcess, `${studentId}_${exam.id}_q`);
   }
 
   const secureQuestions = questionsToProcess.map(eq => {
-    const { correctAnswersSnapshot, ...safeEq } = eq;
-    
-    // 2. Shuffle Options if enabled (and it's an MCQ)
-    let finalOptions = [...eq.question.options];
-    let snapshotToUse = eq.optionsSnapshot;
-
-    if (snapshotToUse) {
-      try { finalOptions = JSON.parse(snapshotToUse); } catch(e) {}
+    // Prefer the frozen snapshot (what the exam was published with)
+    let finalOptions = eq.question.options;
+    if (eq.optionsSnapshot) {
+      try {
+        const parsed = typeof eq.optionsSnapshot === "string" ? JSON.parse(eq.optionsSnapshot) : eq.optionsSnapshot;
+        if (Array.isArray(parsed)) finalOptions = parsed;
+      } catch (e) {}
     }
 
+    // Never send the answer key to the browser
+    finalOptions = finalOptions.map(({ id, label, text, order }) => ({ id, label, text, order }));
+
+    // 2. Shuffle Options if enabled (and it's an MCQ)
     if (exam.shuffleOptions && eq.question.type !== 'SUBJECTIVE') {
-       finalOptions = seededShuffle(finalOptions, `${studentId}_${exam.id}_opt_${eq.questionId}`);
-       // If we were using a snapshot, update the snapshot field for the frontend to consume
-       if (snapshotToUse) {
-         snapshotToUse = JSON.stringify(finalOptions);
-       }
+       finalOptions = seededShuffle([...finalOptions], `${studentId}_${exam.id}_opt_${eq.questionId}`);
     }
 
     return {
-      ...safeEq,
-      optionsSnapshot: snapshotToUse,
+      examId: eq.examId,
+      questionId: eq.questionId,
+      order: eq.order,
+      marks: eq.marks,
+      questionTextSnapshot: eq.questionTextSnapshot,
+      // Sanitised copy for clients that read the snapshot field directly
+      optionsSnapshot: JSON.stringify(finalOptions),
       question: {
-        ...eq.question,
-        options: finalOptions.map(opt => {
-          const { isCorrect, ...safeOpt } = opt;
-          return safeOpt;
-        })
+        id: eq.question.id,
+        text: eq.questionTextSnapshot || eq.question.text,
+        type: eq.question.type,
+        defaultMarks: eq.question.defaultMarks,
+        // modelAnswer / creator info intentionally omitted
+        options: finalOptions
       }
     };
   });
 
-  const { access: _, ...safeExam } = exam;
-  return { ...safeExam, questions: secureQuestions };
+  return { ...examMeta, questionCount: questions.length, questions: secureQuestions };
 }
 
 export async function startExam(teacherId, examId) {
@@ -374,6 +427,8 @@ export async function updateExam(id, teacherId, data) {
     startTime, endTime, shuffleQuestions, shuffleOptions 
   } = data;
 
+  await assertCollegeRefs(exam.collegeId, { subjectId, branchId, batchId });
+
   const targetBatchId = batchId !== undefined ? batchId : (exam.access.length > 0 ? exam.access[0].batchId : null);
   const targetStartTime = startTime !== undefined ? (startTime ? new Date(startTime) : null) : exam.startTime;
   const targetEndTime = endTime !== undefined ? (endTime ? new Date(endTime) : null) : exam.endTime;
@@ -387,11 +442,11 @@ export async function updateExam(id, teacherId, data) {
       data: {
         title,
         description,
-        semester: semester ? parseInt(semester, 10) : undefined,
-        duration: duration ? parseInt(duration, 10) : undefined,
-        totalMarks: totalMarks ? parseInt(totalMarks, 10) : undefined,
-        passingMarks: passingMarks ? parseInt(passingMarks, 10) : undefined,
-        subjectId,
+        semester: semester !== undefined ? toInt(semester, null) : undefined,
+        duration: toInt(duration) > 0 ? toInt(duration) : undefined,
+        totalMarks: toInt(totalMarks) > 0 ? toInt(totalMarks) : undefined,
+        passingMarks: passingMarks !== undefined ? toInt(passingMarks, null) : undefined,
+        subjectId: subjectId || undefined,
         startTime: startTime ? new Date(startTime) : undefined,
         endTime: endTime ? new Date(endTime) : undefined,
         shuffleQuestions: shuffleQuestions !== undefined ? !!shuffleQuestions : undefined,
@@ -430,42 +485,43 @@ export async function completeExam(teacherId, examId) {
   if (!exam || exam.creatorId !== teacherId) throw new Error("Unauthorized");
   if (exam.status !== "ACTIVE") throw new Error("Only active exams can be terminated");
 
-  return prisma.$transaction(async (tx) => {
+  const now = new Date();
+
+  const { updated, pendingAttempts } = await prisma.$transaction(async (tx) => {
     // 1. Mark exam as completed
     const updated = await tx.exam.update({
       where: { id: examId },
       data: { 
         status: "COMPLETED",
-        endTime: new Date() // Force end time to now
+        endTime: now // Force end time to now
       }
     });
 
     // 2. Force-submit all in-progress attempts
     const pendingAttempts = await tx.attempt.findMany({
-      where: { 
-        examId: examId,
-        status: "IN_PROGRESS"
-      }
+      where: { examId, status: "IN_PROGRESS" },
+      select: { id: true }
     });
 
     await tx.attempt.updateMany({
-      where: { 
-        examId: examId,
-        status: "IN_PROGRESS"
-      },
-      data: {
-        status: "TIMED_OUT",
-        submittedAt: new Date()
-      }
+      where: { examId, status: "IN_PROGRESS" },
+      data: { status: "TIMED_OUT", submittedAt: now }
     });
 
-    // 3. Trigger auto-grading for all just-closed attempts
-    for (const attempt of pendingAttempts) {
-      await autoGradeAttempt(attempt.id, tx);
-    }
-
-    return updated;
+    return { updated, pendingAttempts };
   });
+
+  // 3. Grade outside the transaction — large classes would blow the
+  //    interactive-transaction timeout otherwise.
+  for (const attempt of pendingAttempts) {
+    try {
+      await autoGradeAttempt(attempt.id);
+    } catch (err) {
+      console.error(`[completeExam] grading failed for attempt ${attempt.id}`, err);
+    }
+  }
+
+  return updated;
 }
 
 export async function deleteExam(id, teacherId) {

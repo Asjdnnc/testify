@@ -1,28 +1,12 @@
 import prisma from "@/lib/prisma.js";
-import { cookies } from "next/headers";
-
-async function getAuthContext() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("testify-token")?.value;
-  if (!token) return null;
-  try {
-    return JSON.parse(
-      Buffer.from(
-        token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"),
-        "base64"
-      ).toString("utf8")
-    );
-  } catch {
-    return null;
-  }
-}
+import { requireAuth, errorResponse } from "@/lib/server-auth.js";
+import { studentExamAccessWhere } from "@/lib/services/attempt.service.js";
 
 // GET /api/dashboard
 // Returns role-specific stats for the dashboard overview
-export async function GET() {
+export async function GET(req) {
   try {
-    const auth = await getAuthContext();
-    if (!auth) return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    const auth = await requireAuth(req);
 
     const { userId, role, collegeId } = auth;
     let stats = {};
@@ -59,21 +43,18 @@ export async function GET() {
     }
 
     if (role === "STUDENT") {
-      const availableExams = await prisma.exam.count({
-        where: {
-          collegeId,
-          status: { in: ["PUBLISHED", "ACTIVE"] },
-          access: {
-            some: {
-              OR: [
-                { batchId: auth.batchId },
-                { branchId: auth.branchId, batchId: null },
-                { branchId: null, batchId: null },
-              ],
-            },
-          },
-        },
+      const student = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { collegeId: true, branchId: true, batchId: true },
       });
+      const availableExams = student
+        ? await prisma.exam.count({
+            where: {
+              status: { in: ["PUBLISHED", "ACTIVE"] },
+              ...studentExamAccessWhere(student),
+            },
+          })
+        : 0;
       const completedAttempts = await prisma.attempt.count({
         where: { userId, status: { in: ["SUBMITTED", "TIMED_OUT", "CHEATED"] } },
       });
@@ -93,7 +74,7 @@ export async function GET() {
         availableExams,
         completedAttempts,
         inProgressAttempt,
-        avgPercentage: avgResult._avg.percentage
+        avgPercentage: avgResult._avg.percentage !== null
           ? Math.round(avgResult._avg.percentage)
           : null,
       };
@@ -111,10 +92,6 @@ export async function GET() {
 
     return Response.json({ success: true, stats });
   } catch (error) {
-    console.error("[GET /api/dashboard]", error);
-    return Response.json(
-      { success: false, message: error.message },
-      { status: 500 }
-    );
+    return errorResponse(error, 500);
   }
 }

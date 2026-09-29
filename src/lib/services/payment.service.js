@@ -41,26 +41,44 @@ async function createRazorpayOrder(amountInPaise, currency, receiptId) {
 }
 
 // ── Razorpay signature verification ──────────────────────────────────────────
+function safeEqualHex(expected, received) {
+  if (typeof received !== "string" || received.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));
+}
+
+// Checkout callback: HMAC(order_id|payment_id, key_secret)
 function verifyRazorpaySignature(orderId, paymentId, signature) {
+  const secret = process.env.RAZORPAY_KEY_SECRET;
+  if (!secret || !orderId || !paymentId) return false;
   const expectedSignature = crypto
-    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+    .createHmac("sha256", secret)
     .update(`${orderId}|${paymentId}`)
     .digest("hex");
 
-  return expectedSignature === signature;
+  return safeEqualHex(expectedSignature, signature);
+}
+
+// Server webhook: HMAC(raw body, webhook_secret)
+function verifyRazorpayWebhookSignature(rawBody, signature) {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!secret || !rawBody) return false;
+  const expectedSignature = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+  return safeEqualHex(expectedSignature, signature);
 }
 
 // ---------------------------------------------------------------------------
 // initiatePayment — creates a Payment row (PENDING) and a gateway order
 // ---------------------------------------------------------------------------
 export async function initiatePayment(collegeId, planType, gateway = "razorpay") {
+  if (planType === "TRIAL") throw new Error("The trial plan cannot be purchased");
   const plan = await getPlanByType(planType);
+  if (!plan.isActive) throw new Error("This plan is not available");
 
   const college = await prisma.college.findUnique({
     where: { id: collegeId },
-    select: { id: true, name: true, subscriptionStatus: true },
+    select: { id: true, name: true, subscriptionStatus: true, deletedAt: true },
   });
-  if (!college) throw new Error("College not found");
+  if (!college || college.deletedAt) throw new Error("College not found");
 
   const receiptId = `testify_${collegeId.slice(0, 8)}_${Date.now()}`;
   let gatewayOrderId = null;
@@ -96,33 +114,61 @@ export async function initiatePayment(collegeId, planType, gateway = "razorpay")
 // ---------------------------------------------------------------------------
 // handlePaymentWebhook — verifies signature, idempotent, activates subscription
 // ---------------------------------------------------------------------------
-export async function handlePaymentWebhook(gateway, body, signature) {
+export async function handlePaymentWebhook(gateway, body, headerSignature = null, rawBody = null) {
   if (gateway !== "razorpay") throw new Error("Unsupported gateway");
 
-  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, event } = body;
+  let orderId, paymentId, paidAmount = null;
 
-  // Only handle successful payment events
-  if (event && event !== "payment.captured") return { skipped: true, event };
+  if (body?.event) {
+    // ── Server-to-server webhook ──
+    if (!verifyRazorpayWebhookSignature(rawBody, headerSignature)) {
+      throw Object.assign(new Error("Invalid webhook signature"), { statusCode: 400 });
+    }
 
-  // Verify signature
-  if (!verifyRazorpaySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature || signature)) {
-    throw Object.assign(new Error("Invalid webhook signature"), { statusCode: 400 });
+    if (body.event === "payment.failed") {
+      const entity = body.payload?.payment?.entity;
+      if (entity?.order_id) {
+        await handlePaymentFailure(entity.order_id, entity.error_description).catch(() => {});
+      }
+      return { handled: true, event: body.event };
+    }
+
+    // Only handle successful payment events
+    if (body.event !== "payment.captured" && body.event !== "order.paid") {
+      return { skipped: true, event: body.event };
+    }
+
+    const entity = body.payload?.payment?.entity;
+    orderId = entity?.order_id;
+    paymentId = entity?.id;
+    paidAmount = entity?.amount ?? null;
+  } else {
+    // ── Browser checkout callback ──
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = body || {};
+    if (!verifyRazorpaySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature)) {
+      throw Object.assign(new Error("Invalid webhook signature"), { statusCode: 400 });
+    }
+    orderId = razorpay_order_id;
+    paymentId = razorpay_payment_id;
   }
 
-  // Idempotency: skip if already processed
-  const existing = await prisma.payment.findFirst({
-    where: { gatewayPaymentId: razorpay_payment_id, status: "SUCCESS" },
-  });
-  if (existing) return { idempotent: true, paymentId: existing.id };
+  if (!orderId || !paymentId) throw Object.assign(new Error("Malformed payment payload"), { statusCode: 400 });
 
-  // Find the pending payment by gateway order ID
+  // Find the payment by gateway order ID
   const payment = await prisma.payment.findFirst({
-    where: { gatewayOrderId: razorpay_order_id },
+    where: { gatewayOrderId: orderId },
   });
-  if (!payment) throw new Error(`Payment not found for order: ${razorpay_order_id}`);
+  if (!payment) throw Object.assign(new Error("Payment not found"), { statusCode: 404 });
+
+  // Idempotency: callback + webhook both fire for the same payment
+  if (payment.status === "SUCCESS") return { idempotent: true, paymentId: payment.id };
+
+  if (paidAmount !== null && paidAmount !== payment.amountInPaise) {
+    throw Object.assign(new Error("Payment amount mismatch"), { statusCode: 400 });
+  }
 
   // Activate subscription
-  await activateSubscription(payment.collegeId, payment.id, payment.planType, razorpay_payment_id);
+  await activateSubscription(payment.collegeId, payment.id, payment.planType, paymentId);
 
   return { success: true, paymentId: payment.id };
 }
@@ -135,7 +181,15 @@ export async function activateSubscription(collegeId, paymentId, planType, gatew
   const now = new Date();
   const expiresAt = new Date(now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000);
 
-  await prisma.$transaction(async (tx) => {
+  const activated = await prisma.$transaction(async (tx) => {
+    // 0. Claim the payment atomically — concurrent callback + webhook must
+    //    not create two subscriptions.
+    const claimed = await tx.payment.updateMany({
+      where: { id: paymentId, status: { not: "SUCCESS" } },
+      data: { status: "SUCCESS" },
+    });
+    if (claimed.count === 0) return false;
+
     // 1. Deactivate previous subscriptions
     await tx.collegeSubscription.updateMany({
       where: { collegeId, isActive: true },
@@ -174,11 +228,15 @@ export async function activateSubscription(collegeId, paymentId, planType, gatew
         planType,
         currentPeriodStart: now,
         currentPeriodEnd: expiresAt,
+        // Paying reverses any scheduled trial-expiry deletion
+        scheduledDeletionAt: null,
       },
     });
+
+    return true;
   });
 
-  return { activated: true, expiresAt };
+  return { activated, expiresAt };
 }
 
 // ---------------------------------------------------------------------------

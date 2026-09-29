@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Edit3, Check, X, PlusCircle } from "lucide-react";
+import { Pencil, Check, X, Send, Users, CalendarClock, BarChart3, AlertTriangle, Circle, FileQuestion } from "lucide-react";
 import { 
   ChevronLeft, 
   Search, 
@@ -33,6 +33,7 @@ import {
   Loader2
 } from "lucide-react";
 import { OCRImporterModal } from "@/components/dashboard/ocr-importer";
+import { StatusBadge, EmptyState, LoadingState, SearchInput, Modal, Field, inputClass, selectClass } from "@/components/ui/saas";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -58,290 +59,248 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useDraggable } from '@dnd-kit/core';
 
+const TYPE_LABEL = { MCQ_SINGLE: "Single choice", MCQ_MULTIPLE: "Multiple choice", SUBJECTIVE: "Written" };
+const TYPE_TONE = { MCQ_SINGLE: "primary", MCQ_MULTIPLE: "info", SUBJECTIVE: "warning" };
+const BLANK_OPTIONS = () => [
+  { text: "", label: "A", isCorrect: true, order: 0 },
+  { text: "", label: "B", isCorrect: false, order: 1 },
+];
+
 // --- Sub-Component: Question Composer Modal ---
 function QuestionComposer({ isOpen, onClose, onSave, initialData = null, processing = false }) {
-  const [form, setForm] = useState({
-    text: "",
-    type: "MCQ_SINGLE",
-    defaultMarks: 2,
-    modelAnswer: "",
-    options: [
-      { text: "", label: "A", isCorrect: true, order: 0 },
-      { text: "", label: "B", isCorrect: false, order: 1 }
-    ]
-  });
+  const [form, setForm] = useState({ text: "", type: "MCQ_SINGLE", defaultMarks: 2, modelAnswer: "", options: BLANK_OPTIONS() });
 
   useEffect(() => {
     if (initialData) {
-      setForm({
-        ...initialData,
-        options: initialData.options?.length > 0 ? initialData.options : [
-          { text: "", label: "A", isCorrect: true, order: 0 },
-          { text: "", label: "B", isCorrect: false, order: 1 }
-        ]
-      });
+      setForm({ ...initialData, options: initialData.options?.length > 0 ? initialData.options : BLANK_OPTIONS() });
     } else {
-      setForm({
-        text: "",
-        type: "MCQ_SINGLE",
-        defaultMarks: 2,
-        modelAnswer: "",
-        options: [
-          { text: "", label: "A", isCorrect: true, order: 0 },
-          { text: "", label: "B", isCorrect: false, order: 1 }
-        ]
-      });
+      setForm({ text: "", type: "MCQ_SINGLE", defaultMarks: 2, modelAnswer: "", options: BLANK_OPTIONS() });
     }
   }, [initialData, isOpen]);
 
-  if (!isOpen) return null;
-
   const addOption = () => {
     const nextLabel = String.fromCharCode(65 + form.options.length);
-    setForm({
-      ...form,
-      options: [...form.options, { text: "", label: nextLabel, isCorrect: false, order: form.options.length }]
-    });
+    setForm({ ...form, options: [...form.options, { text: "", label: nextLabel, isCorrect: false, order: form.options.length }] });
   };
-
   const removeOption = (idx) => {
-    setForm({
-      ...form,
-      options: form.options.filter((_, i) => i !== idx).map((o, i) => ({ ...o, label: String.fromCharCode(65 + i), order: i }))
-    });
+    setForm({ ...form, options: form.options.filter((_, i) => i !== idx).map((o, i) => ({ ...o, label: String.fromCharCode(65 + i), order: i })) });
+  };
+  const toggleCorrect = (idx) => {
+    if (form.type === "MCQ_SINGLE") setForm({ ...form, options: form.options.map((o, i) => ({ ...o, isCorrect: i === idx })) });
+    else setForm({ ...form, options: form.options.map((o, i) => (i === idx ? { ...o, isCorrect: !o.isCorrect } : o)) });
   };
 
-  const toggleCorrect = (idx) => {
-    if (form.type === "MCQ_SINGLE") {
-      setForm({ ...form, options: form.options.map((o, i) => ({ ...o, isCorrect: i === idx })) });
-    } else {
-      setForm({ ...form, options: form.options.map((o, i) => i === idx ? { ...o, isCorrect: !o.isCorrect } : o) });
-    }
-  };
+  const isMcq = form.type.startsWith("MCQ");
+  const hasCorrect = !isMcq || form.options.some((o) => o.isCorrect);
+  const valid = form.text.trim() && hasCorrect && (!isMcq || form.options.every((o) => o.text.trim()));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl border-none rounded-[32px]">
-        <CardHeader className="bg-slate-50 dark:bg-slate-800/50 p-8 border-b border-muted/20">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-2xl font-black">{initialData ? "Edit Assessment Asset" : "Create New Asset"}</CardTitle>
-              <CardDescription className="font-bold text-slate-500 uppercase tracking-widest text-[10px] mt-1">Question Composer Engine</CardDescription>
-            </div>
-            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full h-10 w-10"><X className="w-5 h-5" /></Button>
-          </div>
-        </CardHeader>
-        <CardContent className="p-8 space-y-6">
-          <div className="grid md:grid-cols-2 gap-6">
-             <div className="space-y-2">
-                <Label className="font-black text-[10px] uppercase tracking-widest opacity-50">Response Format</Label>
-                <select className="w-full h-12 rounded-xl bg-muted/20 border-none font-bold px-4 focus:ring-2 focus:ring-indigo-500 transition-all appearance-none cursor-pointer" value={form.type} onChange={e => setForm({...form, type: e.target.value})}>
-                   <option value="MCQ_SINGLE">Multiple Choice (Single)</option>
-                   <option value="MCQ_MULTIPLE">Multiple Choice (Multiple)</option>
-                   <option value="SUBJECTIVE">Written / Subjective</option>
-                </select>
-             </div>
-             <div className="space-y-2">
-                <Label className="font-black text-[10px] uppercase tracking-widest opacity-50">Default marks</Label>
-                <Input type="number" value={form.defaultMarks} onChange={e => setForm({...form, defaultMarks: e.target.value})} className="h-12 rounded-xl border-muted/20 font-bold" />
-             </div>
-          </div>
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      title={initialData ? "Edit question" : "New question"}
+      description={initialData ? "Changes apply to the question bank. Questions in live exams are copied instead." : "It will be saved to the bank and added to this exam."}
+      size="lg"
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button disabled={processing || !valid} onClick={() => onSave(form)}>
+            {processing ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            {initialData ? "Save changes" : "Create & add to exam"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Question type">
+            <select className={selectClass} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+              <option value="MCQ_SINGLE">Single choice (one correct answer)</option>
+              <option value="MCQ_MULTIPLE">Multiple choice (several correct)</option>
+              <option value="SUBJECTIVE">Written answer (graded by you)</option>
+            </select>
+          </Field>
+          <Field label="Marks">
+            <input type="number" min="0" className={inputClass} value={form.defaultMarks} onChange={(e) => setForm({ ...form, defaultMarks: e.target.value })} />
+          </Field>
+        </div>
+        <Field label="Question">
+          <textarea className={`${inputClass} h-28 py-2`} placeholder="Type the question students will see…" value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })} />
+        </Field>
+        {isMcq && (
           <div className="space-y-2">
-             <Label className="font-black text-[10px] uppercase tracking-widest opacity-50">Question Statement</Label>
-             <textarea className="w-full p-4 rounded-2xl bg-muted/20 border-none font-medium h-32 focus:ring-4 focus:ring-indigo-50 transition-all resize-none" placeholder="Enter the core educational prompt..." value={form.text} onChange={e => setForm({...form, text: e.target.value})} />
-          </div>
-          {form.type.startsWith("MCQ") && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b">
-                 <Label className="font-black text-[10px] uppercase tracking-widest opacity-50">Options Configuration</Label>
-                 <Button variant="ghost" size="sm" onClick={addOption} className="text-indigo-600 font-bold text-[10px] uppercase h-7 px-3 rounded-full hover:bg-indigo-50"><Plus className="w-3 h-3 mr-1" /> Add Choice</Button>
-              </div>
-              <div className="grid lg:grid-cols-2 gap-3">
-                 {form.options.map((opt, i) => (
-                   <div key={i} className="flex items-center gap-2 group">
-                      <div onClick={() => toggleCorrect(i)} className={`w-10 h-10 shrink-0 rounded-xl border flex items-center justify-center cursor-pointer transition-all ${opt.isCorrect ? "bg-emerald-500 border-emerald-600 text-white shadow-lg shadow-emerald-500/20" : "bg-muted/10 border-transparent text-muted-foreground hover:bg-muted/30"}`}>
-                         <span className="text-xs font-black">{opt.label}</span>
-                      </div>
-                      <Input placeholder={`Option ${opt.label}...`} value={opt.text} onChange={e => { const next = [...form.options]; next[i].text = e.target.value; setForm({...form, options: next}); }} className="h-10 rounded-xl border-muted/10 font-medium text-sm" />
-                      {form.options.length > 2 && <Button variant="ghost" size="icon" onClick={() => removeOption(i)} className="opacity-0 group-hover:opacity-100 h-8 w-8 text-rose-500 hover:bg-rose-50 rounded-full transition-all"><Trash2 className="w-4 h-4" /></Button>}
-                   </div>
-                 ))}
-              </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-foreground">Answer options</span>
+              <span className="text-xs text-muted-foreground">{form.type === "MCQ_SINGLE" ? "Click a letter to mark the correct answer" : "Click letters to mark all correct answers"}</span>
             </div>
-          )}
-          {form.type === "SUBJECTIVE" && (
-            <div className="space-y-2">
-               <Label className="font-black text-[10px] uppercase tracking-widest opacity-50">Model Answer / Rubric</Label>
-               <textarea className="w-full p-4 rounded-2xl bg-muted/5 border-2 border-dashed border-muted/20 font-medium h-24 focus:ring-4 focus:ring-indigo-50 transition-all resize-none text-sm italic" placeholder="Enter reference answer key..." value={form.modelAnswer} onChange={e => setForm({...form, modelAnswer: e.target.value})} />
-            </div>
-          )}
-          <div className="flex gap-4 pt-4">
-             <Button variant="ghost" onClick={onClose} className="h-14 flex-1 rounded-2xl font-bold uppercase tracking-widest text-[11px] hover:bg-slate-50">Discard Changes</Button>
-             <Button disabled={processing || !form.text} onClick={() => onSave(form)} className="h-14 flex-1 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-[11px] shadow-xl shadow-indigo-600/20 flex gap-2"><Save className="w-5 h-5 mr-1" /> {initialData ? "Save Global Changes" : "Create & Auto-Link"}</Button>
+            {form.options.map((opt, i) => (
+              <div key={i} className="group flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => toggleCorrect(i)}
+                  aria-pressed={opt.isCorrect}
+                  title={opt.isCorrect ? "Correct answer" : "Mark as correct"}
+                  className={`flex size-9 shrink-0 items-center justify-center rounded-lg border text-sm font-semibold transition-colors ${
+                    opt.isCorrect ? "border-success bg-emerald-600 text-white" : "bg-background text-muted-foreground hover:border-success/60"
+                  }`}
+                >
+                  {opt.isCorrect ? <Check className="size-4" /> : opt.label}
+                </button>
+                <input
+                  className={inputClass}
+                  placeholder={`Option ${opt.label}`}
+                  value={opt.text}
+                  onChange={(e) => { const next = [...form.options]; next[i] = { ...next[i], text: e.target.value }; setForm({ ...form, options: next }); }}
+                />
+                {form.options.length > 2 && (
+                  <Button variant="ghost" size="icon-sm" onClick={() => removeOption(i)} className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Remove option ${opt.label}`}>
+                    <X className="size-4" />
+                  </Button>
+                )}
+              </div>
+            ))}
+            {form.options.length < 8 && (
+              <Button variant="ghost" size="sm" onClick={addOption} className="text-primary"><Plus className="size-4" /> Add option</Button>
+            )}
+            {!hasCorrect && <p className="text-xs text-destructive">Mark at least one correct answer.</p>}
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        )}
+        {form.type === "SUBJECTIVE" && (
+          <Field label="Model answer" hint="Only teachers see this — it guides grading.">
+            <textarea className={`${inputClass} h-24 py-2`} placeholder="Key points a full-marks answer should cover…" value={form.modelAnswer || ""} onChange={(e) => setForm({ ...form, modelAnswer: e.target.value })} />
+          </Field>
+        )}
+      </div>
+    </Modal>
   );
 }
 
-// --- Sub-Component: Draggable Repository Item ---
+// --- Sub-Component: Draggable question-bank row ---
 function DraggableBankQuestion({ question, onEdit, onDelete, onAdd, disabled, processing }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `bank-${question.id}`,
-    data: { type: 'bank', question }
+    data: { type: "bank", question },
   });
-
-  const style = transform ? {
-    transform: CSS.Translate.toString(transform),
-    zIndex: isDragging ? 50 : undefined,
-    opacity: isDragging ? 0.5 : undefined
-  } : undefined;
-
-  const isLocked = question.exams?.some(usage => usage.exam.status === 'ACTIVE' || usage.exam.status === 'COMPLETED');
+  const style = transform ? { transform: CSS.Translate.toString(transform), zIndex: isDragging ? 50 : undefined, opacity: isDragging ? 0.5 : undefined } : undefined;
+  const isLocked = question.exams?.some((u) => u.exam.status === "ACTIVE" || u.exam.status === "COMPLETED");
 
   return (
-    <Card 
-       ref={setNodeRef} 
-       style={style}
-       className={`group relative overflow-hidden shadow-md rounded-[28px] border border-muted/10 bg-white border-b-4 border-b-muted/10 transition-all ${isDragging ? 'shadow-2xl scale-105' : ''}`}
-    >
-       <CardContent className="p-6 flex flex-col gap-4">
-          <div className="flex gap-6">
-             <div {...attributes} {...listeners} className="flex-1 cursor-grab active:cursor-grabbing">
-                <div className="flex items-center gap-3 mb-4">
-                   <Badge className="text-[10px] font-black uppercase bg-slate-100 text-slate-800" variant="secondary">{question.type?.replace('_', ' ')}</Badge>
-                   <span className="text-[10px] font-black text-emerald-600/60 uppercase">{question.defaultMarks} Marks Asset</span>
-                </div>
-                <p className="text-xl font-bold text-slate-800 leading-tight">{question.text}</p>
-             </div>
-             <div className="flex flex-col gap-2">
-                {!disabled && (
-                   <Button size="icon" variant="ghost" onClick={() => onEdit(question)} className="h-10 w-10 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 rounded-full"><Edit3 className="w-5 h-5" /></Button>
-                )}
-                {!isLocked && (
-                   <Button size="icon" variant="ghost" onClick={() => onDelete(question.id)} className="h-10 w-10 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 rounded-full"><Trash2 className="w-5 h-5" /></Button>
-                )}
-                {!disabled && (
-                   <Button size="icon" variant="ghost" onClick={() => onAdd(question)} disabled={processing} className="h-10 w-10 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100"><Plus className="w-6 h-6" /></Button>
-                )}
-             </div>
+    <div ref={setNodeRef} style={style} className="group flex items-start gap-2 rounded-lg border bg-card p-3 transition-colors hover:border-primary/40">
+      <button {...attributes} {...listeners} className="mt-0.5 cursor-grab rounded p-0.5 text-muted-foreground/60 hover:text-foreground active:cursor-grabbing" aria-label="Drag to exam">
+        <GripVertical className="size-4" />
+      </button>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <StatusBadge tone={TYPE_TONE[question.type]}>{TYPE_LABEL[question.type]}</StatusBadge>
+            <span className="text-xs tabular-nums text-muted-foreground">{question.defaultMarks} mark{question.defaultMarks !== 1 ? "s" : ""}</span>
+            {question.exams?.length > 0 && <span className="text-xs text-muted-foreground">· in {question.exams.length} exam{question.exams.length !== 1 ? "s" : ""}</span>}
           </div>
-          {question.exams?.length > 0 && (
-             <div className="pt-4 border-t border-slate-50 flex flex-wrap items-center gap-2">
-                <span className="text-[8px] font-black uppercase text-slate-300 tracking-widest mr-1">Utilized In:</span>
-                {question.exams.map((usage, i) => (
-                   <div key={`${usage.exam.id}-${i}`} className="px-2 py-0.5 rounded-md bg-slate-50 border border-slate-100/50 text-[9px] font-bold text-slate-400 whitespace-nowrap">{usage.exam.title}</div>
-                ))}
-             </div>
-          )}
-       </CardContent>
-    </Card>
+          <div className="-mr-1 -mt-1 flex shrink-0 items-center gap-0.5">
+            {!disabled && (
+              <Button size="icon-sm" variant="ghost" onClick={() => onEdit(question)} title="Edit" className="text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100"><Pencil className="size-3.5" /></Button>
+            )}
+            {!isLocked && !disabled && (
+              <Button size="icon-sm" variant="ghost" onClick={() => onDelete(question.id)} title="Delete from bank" className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"><Trash2 className="size-3.5" /></Button>
+            )}
+            {!disabled && (
+              <Button size="sm" variant="outline" onClick={() => onAdd(question)} disabled={processing} className="h-7 px-2 text-xs"><Plus className="size-3.5" /> Add</Button>
+            )}
+          </div>
+        </div>
+        <p className="mt-1.5 line-clamp-2 text-sm text-foreground">{question.text}</p>
+      </div>
+    </div>
   );
 }
 
 // --- Sub-Component: Drag Preview for Overlay ---
 function QuestionPreview({ question, type, index }) {
   return (
-    <Card className={`overflow-hidden shadow-2xl rounded-[28px] border-indigo-500/30 bg-white border-2 w-[400px] pointer-events-none opacity-90 rotate-2`}>
-      <CardContent className="p-6">
-        <div className="flex items-center gap-3 mb-4">
-           {type === 'exam' && (
-              <div className="w-8 h-8 rounded-xl bg-slate-900 flex items-center justify-center text-[10px] font-black text-white">
-                 {index + 1}
-              </div>
-           )}
-           <Badge className="text-[10px] font-black uppercase bg-slate-100 text-slate-800" variant="secondary">{question.type?.replace('_', ' ')}</Badge>
-           <span className="text-[10px] font-black text-emerald-600/60 uppercase">{question.defaultMarks || question.marks} Marks</span>
-        </div>
-        <p className="text-lg font-bold text-slate-800 leading-tight line-clamp-2">{question.text || question.questionTextSnapshot}</p>
-        <div className="mt-4 flex items-center gap-2 text-[10px] font-black uppercase text-indigo-500 bg-indigo-50 px-3 py-1 rounded-full w-fit">
-           <Zap className="w-3 h-3" /> Linking to Assessment...
-        </div>
-      </CardContent>
-    </Card>
+    <div className="pointer-events-none w-[360px] rotate-1 rounded-lg border-2 border-primary bg-card p-3 shadow-2xl">
+      <div className="flex items-center gap-2">
+        {type === "exam" && <span className="flex size-6 items-center justify-center rounded-md bg-primary text-xs font-semibold text-primary-foreground">{index + 1}</span>}
+        <StatusBadge tone={TYPE_TONE[question.type]}>{TYPE_LABEL[question.type]}</StatusBadge>
+      </div>
+      <p className="mt-2 line-clamp-2 text-sm text-foreground">{question.text || question.questionTextSnapshot}</p>
+      {type === "bank" && <p className="mt-2 text-xs font-medium text-primary">Drop on the exam paper to add</p>}
+    </div>
   );
 }
 
-// --- Sub-Component: Sortable Exam Structure Item ---
-function SortableExamQuestion({ id, index, eq, examStatus, onEdit, onDeleteManual, onPurge, processing }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging
-  } = useSortable({ id: eq.questionId });
+// --- Sub-Component: Sortable question on the exam paper ---
+function SortableExamQuestion({ index, eq, examStatus, onEdit, onDeleteManual, processing }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: eq.questionId });
+  const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 50 : undefined, opacity: isDragging ? 0.3 : undefined };
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : undefined,
-    opacity: isDragging ? 0.3 : undefined
-  };
-
-  const isFrozen = examStatus === 'ACTIVE' || examStatus === 'COMPLETED';
+  const isFrozen = examStatus === "ACTIVE" || examStatus === "COMPLETED";
   const text = isFrozen ? eq.questionTextSnapshot : eq.question.text;
   const options = isFrozen ? (eq.optionsSnapshot ? JSON.parse(eq.optionsSnapshot) : []) : (eq.question.options || []);
 
   return (
-    <Card 
-       ref={setNodeRef} 
-       style={style} 
-       className={`group relative overflow-hidden transition-all shadow-custom rounded-[32px] bg-white border-none border-b-4 border-b-indigo-100 ${isDragging ? 'shadow-2xl' : ''}`}
-    >
-       <CardHeader className="p-6 pb-4 flex flex-row items-start justify-between space-y-0">
-          <div className="flex items-center gap-5">
-             <div {...attributes} {...listeners} className="flex items-center gap-3 cursor-grab active:cursor-grabbing hover:bg-slate-50 p-2 -m-2 rounded-2xl transition-all">
-                <GripVertical className="w-5 h-5 text-slate-300" />
-                <div className="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center text-[12px] font-black text-white tracking-widest shadow-lg">
-                   {index + 1}
-                </div>
-             </div>
-             <Badge variant="outline" className="text-[9px] font-black bg-indigo-50 text-indigo-700 border-indigo-100 uppercase tracking-widest px-3 py-1">{eq.question.type}</Badge>
+    <div ref={setNodeRef} style={style} className="group rounded-lg border bg-card p-4 shadow-xs">
+      <div className="flex items-start gap-3">
+        {!isFrozen ? (
+          <button {...attributes} {...listeners} className="mt-0.5 flex cursor-grab items-center gap-1 rounded p-0.5 text-muted-foreground/60 hover:text-foreground active:cursor-grabbing" aria-label={`Reorder question ${index + 1}`}>
+            <GripVertical className="size-4" />
+          </button>
+        ) : null}
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-xs font-semibold text-primary">{index + 1}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <StatusBadge tone={TYPE_TONE[eq.question.type]}>{TYPE_LABEL[eq.question.type]}</StatusBadge>
+            <span className="text-xs font-medium tabular-nums text-foreground">{eq.marks} mark{eq.marks !== 1 ? "s" : ""}</span>
           </div>
-          <div className="flex items-center gap-3">
-             <div className="flex items-center gap-2 h-10 px-4 bg-slate-50 rounded-xl border border-muted/10"><span className="text-[10px] font-black uppercase opacity-60">Weightage:</span><span className="text-sm font-black text-indigo-700">{eq.marks} PTS</span></div>
-             {!isFrozen && (
-                <div className="flex items-center gap-1">
-                   <Button size="icon" variant="ghost" onClick={() => onEdit(eq.question)} className="h-10 w-10 text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 rounded-full"><Edit3 className="w-5 h-5" /></Button>
-                   {!eq.question.exams?.some(u => u.exam.status === 'ACTIVE' || u.exam.status === 'COMPLETED') && (
-                      <Button size="icon" variant="ghost" onClick={() => onPurge(eq.questionId)} className="h-10 w-10 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 rounded-full"><Trash className="w-5 h-5" /></Button>
-                   )}
-                   <Button size="icon" variant="ghost" onClick={() => onDeleteManual(eq.questionId)} disabled={processing} className="h-10 w-10 text-muted-foreground hover:bg-rose-50 hover:text-rose-600 rounded-full active:scale-95"><Trash2 className="w-5 h-5" /></Button>
-                </div>
-             )}
-          </div>
-       </CardHeader>
-       <CardContent className="p-6 pt-0">
-          <p className="text-xl font-bold text-slate-800 leading-tight mb-6">{text}</p>
+          <p className="mt-2 text-sm leading-relaxed text-foreground">{text}</p>
           {options.length > 0 && (
-             <div className="grid grid-cols-2 gap-4">
-                {options.map((opt, i) => (
-                   <div key={opt.id || opt.label || i} className={`p-4 rounded-[20px] text-xs border flex items-center gap-4 transition-all ${opt.isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-900 font-bold' : 'bg-slate-50/50 border-slate-100 text-slate-500 font-medium'}`}>
-                      <span className="w-7 h-7 rounded-lg flex items-center justify-center bg-white border border-muted/10 shadow-sm text-xs font-black">{opt.label}</span>
-                      <span className="truncate">{opt.text}</span>
-                      {opt.isCorrect && <CheckCircle2 className="w-5 h-5 ml-auto text-emerald-600" />}
-                   </div>
-                ))}
-             </div>
+            <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
+              {options.map((opt, i) => (
+                <li key={opt.id || opt.label || i} className={`flex items-center gap-2 rounded-md px-2 py-1 text-xs ${opt.isCorrect ? "bg-success/10 text-foreground" : "text-muted-foreground"}`}>
+                  <span className={`flex size-5 shrink-0 items-center justify-center rounded text-[11px] font-semibold ${opt.isCorrect ? "bg-emerald-600 text-white" : "bg-muted"}`}>{opt.label}</span>
+                  <span className="truncate">{opt.text}</span>
+                </li>
+              ))}
+            </ul>
           )}
-       </CardContent>
-    </Card>
+        </div>
+        {!isFrozen && (
+          <div className="flex shrink-0 items-center gap-0.5">
+            <Button size="icon-sm" variant="ghost" onClick={() => onEdit(eq.question)} title="Edit question" className="text-muted-foreground"><Pencil className="size-3.5" /></Button>
+            <Button size="icon-sm" variant="ghost" onClick={() => onDeleteManual(eq.questionId)} disabled={processing} title="Remove from exam" className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><X className="size-4" /></Button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
-// --- Sub-Component: Droppable Container for Exam Structure ---
+// --- Sub-Component: Droppable exam paper ---
 function AssessmentDropZone({ children, id }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
-    <div 
-       ref={setNodeRef} 
-       className={`space-y-6 min-h-[60vh] rounded-[48px] transition-all duration-300 ${isOver ? 'bg-indigo-50/50 ring-4 ring-indigo-200 ring-dashed' : ''}`}
-    >
-       {children}
+    <div ref={setNodeRef} className={`min-h-[40vh] space-y-3 rounded-xl p-1 transition-colors ${isOver ? "bg-primary/5 outline-2 outline-dashed outline-primary/50" : ""}`}>
+      {children}
     </div>
+  );
+}
+
+function Toggle({ checked, onChange, title, description }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="flex w-full items-center justify-between gap-4 rounded-lg border p-3 text-left transition-colors hover:bg-muted/40"
+    >
+      <span>
+        <span className="block text-sm font-medium text-foreground">{title}</span>
+        <span className="block text-xs text-muted-foreground">{description}</span>
+      </span>
+      <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${checked ? "bg-primary" : "bg-muted-foreground/30"}`}>
+        <span className={`absolute top-0.5 size-4 rounded-full bg-white shadow transition-all ${checked ? "left-[18px]" : "left-0.5"}`} />
+      </span>
+    </button>
   );
 }
 
@@ -458,7 +417,7 @@ export default function ExamBuilderPage() {
     setProcessing(true);
     try {
         const res = await orgClient.exams.addQuestion(id, { questionId: question.id, order: exam.questions.length, marks: question.defaultMarks });
-        if (res.success) { toast.success("Question added to exam"); loadData(true); }
+        if (res.success) { toast.success("Added to exam"); loadData(true); }
     } catch (e) { toast.error("Failed to add question"); }
     setProcessing(false);
   }
@@ -474,7 +433,7 @@ export default function ExamBuilderPage() {
   }
 
   async function handleDeleteBankQuestion(questionId) {
-    if (!confirm("PURGE ASSET? This will permanently remove the question from the entire institution repository.")) return;
+    if (!confirm("Delete this question from the bank? It will be removed for all teachers in your college.")) return;
     setProcessing(true);
     try {
         const res = await orgClient.questions.delete(questionId);
@@ -489,7 +448,7 @@ export default function ExamBuilderPage() {
     try {
         const res = await orgClient.exams.update(id, metaForm);
         if (res.success) { 
-            toast.success("Assessment configuration saved");
+            toast.success("Settings saved");
             setIsEditingMeta(false); 
             loadData(true, true); 
         } else {
@@ -504,7 +463,7 @@ export default function ExamBuilderPage() {
     try {
       if (editingQuestion) {
         const res = await orgClient.questions.update(editingQuestion.id, { ...formData, examId: id });
-        if (res.success) { toast.success("Question updated successfully"); setIsComposerOpen(false); loadData(true); }
+        if (res.success) { toast.success("Question saved"); setIsComposerOpen(false); loadData(true); }
       } else {
         const res = await orgClient.questions.create({ ...formData, subjectId: exam.subjectId, collegeId: user.collegeId, creatorId: user.id });
         if (res.success) {
@@ -518,11 +477,11 @@ export default function ExamBuilderPage() {
   }
 
   async function handlePublish() {
-    if (!confirm("Finalize Session? Content snapshots will be generated.")) return;
+    if (!confirm("Publish this exam? Students in the selected branch/batch will see it (at the scheduled time, if one is set).")) return;
     setProcessing(true);
     try {
         const res = await orgClient.exams.publish(id, {});
-        if (res.success) { toast.success("Exam published! Snapshots generated."); loadData(true); }
+        if (res.success) { toast.success("Exam published"); loadData(true); }
         else toast.error(res.message);
     } catch (e) { toast.error("Publish failed"); }
     setProcessing(false);
@@ -559,42 +518,66 @@ export default function ExamBuilderPage() {
        }
     }
 
-    toast.success(`Successfully committed ${successCount} OCR Extractions!`);
+    toast.success(`Added ${successCount} imported question${successCount !== 1 ? "s" : ""}`);
     setIsOcrOpen(false);
     setGlobalProcessing(false);
     loadData(true);
   }
 
   async function handleStart() {
-    if (!confirm("Go LIVE? Exam will become active for students.")) return;
+    if (!confirm("Open this exam to students right now?")) return;
     setProcessing(true);
     try {
         const res = await orgClient.exams.start(id);
-        if (res.success) { toast.success("Exam is now LIVE for students!"); loadData(true); }
+        if (res.success) { toast.success("Exam is live"); loadData(true); }
         else toast.error(res.message);
-    } catch (e) { toast.error("Activation failed"); }
+    } catch (e) { toast.error("Couldn't open the exam"); }
     setProcessing(false);
   }
 
   async function handleComplete() {
-    if (!confirm("TERMINATE ASSESSMENT? All active student sessions will be closed immediately. This action cannot be undone.")) return;
+    if (!confirm("End this exam now? Students still writing will be submitted automatically. This can't be undone.")) return;
     setProcessing(true);
     try {
         const res = await orgClient.exams.complete(id);
         if (res.success) { 
-           toast.success("Exam completed. All student attempts localized."); 
+           toast.success("Exam ended — attempts submitted and graded"); 
            loadData(true); 
         } else {
            toast.error(res.message);
         }
-    } catch (e) { toast.error("Termination failed"); }
+    } catch (e) { toast.error("Couldn't end the exam"); }
     setProcessing(false);
   }
 
-  if (loading) return <div className="p-20 text-center animate-pulse text-muted-foreground font-black uppercase tracking-widest italic">Synchronizing Assessment Builder...</div>;
-  if (!exam) return <div className="p-20 text-center">Exam not found.</div>;
+  if (loading) return <LoadingState label="Loading exam…" />;
+  if (!exam) return (
+    <EmptyState icon={FileText} title="Exam not found" description="It may have been deleted, or it belongs to another teacher."
+      action={<Button asChild variant="outline"><Link href="/dashboard/teacher/exams">Back to exams</Link></Button>} />
+  );
 
   const filteredBank = bankQuestions.filter(q => q.text.toLowerCase().includes(bankSearch.toLowerCase()));
+  const isFrozen = exam.status === 'ACTIVE' || exam.status === 'COMPLETED';
+  const canEdit = exam.status === 'DRAFT' || exam.status === 'PUBLISHED';
+  const access = exam.access?.[0];
+  const audience = access?.batch ? `${access.branch?.name || "Branch"} · Batch ${access.batch.name}` : access?.branch ? `${access.branch.name} (all batches)` : "Whole college";
+  const fmt = (d) => d ? new Date(d).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null;
+  const schedule = exam.startTime || exam.endTime ? `${fmt(exam.startTime) || "Any time"} → ${fmt(exam.endTime) || "no end"}` : "No time window";
+  const marksOk = currentTotalMarks === exam.totalMarks;
+  const marksOver = currentTotalMarks > exam.totalMarks;
+  const statusUi = {
+    DRAFT: { label: "Draft", tone: "neutral" },
+    PUBLISHED: { label: exam.startTime && new Date(exam.startTime) > new Date() ? "Scheduled" : "Published", tone: "info" },
+    ACTIVE: { label: "Live", tone: "success" },
+    COMPLETED: { label: "Completed", tone: "primary" },
+  }[exam.status];
+
+  const checklist = [
+    { done: exam.questions.length > 0, label: `${exam.questions.length} question${exam.questions.length !== 1 ? "s" : ""} added` },
+    { done: marksOk, warn: marksOver, label: `Marks add up to ${currentTotalMarks} of ${exam.totalMarks}` },
+    { done: true, label: `Audience: ${audience}` },
+    { done: !!(exam.startTime || exam.endTime), optional: true, label: exam.startTime || exam.endTime ? `Schedule: ${schedule}` : "No schedule — opens as soon as it's published" },
+  ];
 
   function handleDragStart(event) {
     setActiveId(event.active.id);
@@ -603,285 +586,252 @@ export default function ExamBuilderPage() {
   async function handleDragEnd(event) {
     const { active, over } = event;
     setActiveId(null);
-
     if (!over) return;
 
-    // Detect if dropped over the structure container OR any item inside it
-    const isOverStructure = over.id === 'exam-structure-droppable' || 
-                            exam.questions.some(eq => eq.questionId === over.id);
+    const isOverStructure = over.id === 'exam-structure-droppable' || exam.questions.some(eq => eq.questionId === over.id);
 
-    // Dropping from Bank to Structure
     if (active.data.current?.type === 'bank' && isOverStructure) {
-      const q = active.data.current.question;
-      handleAdd(q);
+      handleAdd(active.data.current.question);
       return;
     }
 
-    // Reordering within Structure
     if (active.id !== over.id && active.data.current?.type !== 'bank') {
       const oldIndex = exam.questions.findIndex(eq => eq.questionId === active.id);
       const newIndex = exam.questions.findIndex(eq => eq.questionId === over.id);
-      
       if (oldIndex !== -1 && newIndex !== -1) {
         const newItems = arrayMove(exam.questions, oldIndex, newIndex);
         setExam({ ...exam, questions: newItems });
-        
         try {
-          const orderedIds = newItems.map(eq => eq.questionId);
-          await orgClient.exams.reorderQuestions(id, orderedIds);
+          await orgClient.exams.reorderQuestions(id, newItems.map(eq => eq.questionId));
         } catch (e) {
-          toast.error("Failed to sync order");
+          toast.error("Couldn't save the new order");
           loadData(true);
         }
       }
     }
   }
-return (
-    <div className="space-y-6 container mx-auto pb-20 mt-8 px-4 md:px-0 relative">
-      {(globalProcessing) && (
-        <div className="fixed inset-0 z-[110] bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center pointer-events-auto">
-           <div className="bg-white p-6 rounded-3xl shadow-2xl flex items-center gap-4 animate-in zoom-in-95 duration-200">
-              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-              <div className="flex flex-col">
-                 <span className="font-black text-slate-900 text-lg">Committing Neural Assets...</span>
-                 <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Please do not close this window</span>
-              </div>
-           </div>
+
+  return (
+    <div className="space-y-6">
+      {globalProcessing && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+          <div className="flex items-center gap-3 rounded-xl border bg-card px-5 py-4 shadow-xl">
+            <Loader2 className="size-5 animate-spin text-primary" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Adding imported questions…</p>
+              <p className="text-xs text-muted-foreground">Please keep this window open.</p>
+            </div>
+          </div>
         </div>
       )}
 
-      <OCRImporterModal 
-         isOpen={isOcrOpen} 
-         onClose={() => setIsOcrOpen(false)} 
-         onImportFinalize={handleOcrImportFinalize} 
-      />
-
+      <OCRImporterModal isOpen={isOcrOpen} onClose={() => setIsOcrOpen(false)} onImportFinalize={handleOcrImportFinalize} />
       <QuestionComposer isOpen={isComposerOpen} onClose={() => setIsComposerOpen(false)} onSave={handleSaveQuestion} initialData={editingQuestion} processing={processing} />
 
-      <DndContext 
-        sensors={sensors}
-        collisionDetection={rectIntersection}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      >
-        {/* Header Section */}
-        <div className="flex flex-col lg:grid-cols-2 items-start lg:items-center justify-between gap-6 bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-muted/10 shadow-custom">
-          <div className="flex items-center gap-6">
-             <Link href="/dashboard/teacher/exams">
-                <Button variant="ghost" size="icon" className="h-14 w-14 rounded-full border border-muted/10"><ChevronLeft className="w-7 h-7" /></Button>
-             </Link>
-             <div>
-                <div className="flex items-center gap-3">
-                   <h1 className="text-3xl font-black text-slate-900 leading-none">{exam.title}</h1>
-                   <Badge variant="outline" className={`font-black uppercase text-[10px] px-3 py-1 ${exam.status === 'DRAFT' ? 'bg-amber-50 text-amber-600 border-amber-200' : exam.status === 'PUBLISHED' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-emerald-100 text-emerald-800 border-emerald-300'}`}>{exam.status}</Badge>
-                </div>
-                <div className="flex items-center gap-5 mt-3 text-muted-foreground font-bold text-[10px] uppercase tracking-widest opacity-60">
-                   <span><BookOpen className="w-4 h-4 inline mr-1 text-indigo-500" /> {exam.subject?.name}</span>
-                   <span><Clock className="w-4 h-4 inline mr-1 text-indigo-500" /> {exam.duration}m</span>
-                   <span><FileText className="w-4 h-4 inline mr-1 text-indigo-500" /> {exam.totalMarks} Total</span>
-                </div>
-             </div>
+      {/* Header */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <Link href="/dashboard/teacher/exams" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+            <ChevronLeft className="size-4" /> Exams
+          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">{exam.title}</h1>
+            <StatusBadge tone={statusUi.tone} dot>{statusUi.label}</StatusBadge>
           </div>
-          <div className="flex items-center gap-3">
-             <div className={`px-6 h-16 rounded-2xl border flex flex-col items-center justify-center min-w-[160px] ${currentTotalMarks > exam.totalMarks ? 'border-rose-200 bg-rose-50 text-rose-700 animate-bounce' : 'bg-slate-50/50 border-slate-100 text-slate-600'}`}>
-                <span className="text-[10px] font-black uppercase tracking-tighter opacity-70">Marks Load</span>
-                <span className="text-2xl font-black leading-none">{currentTotalMarks} <span className="text-xs opacity-30">/ {exam.totalMarks}</span></span>
-             </div>
-             {(exam.status === 'DRAFT' || exam.status === 'PUBLISHED') && (
-                <Button variant="outline" onClick={() => setIsEditingMeta(!isEditingMeta)} className="h-16 px-6 rounded-2xl font-black text-[11px] uppercase tracking-widest border-muted-foreground/10"><Settings2 className="w-5 h-5 mr-2 text-indigo-500" /> Config</Button>
-             )}
-             {exam.status === 'DRAFT' && (
-                <Button onClick={handlePublish} disabled={processing || exam.questions.length === 0 || currentTotalMarks > exam.totalMarks} className="bg-slate-900 border-b-4 border-slate-700 hover:bg-slate-800 text-white font-black h-16 px-10 rounded-2xl shadow-xl transition-all active:scale-95 active:border-b-0 flex gap-2"><Check className="w-5 h-5 text-indigo-400" /> Finalize Builder</Button>
-             )}
-             {exam.status === 'PUBLISHED' && (
-                <Button onClick={handleStart} disabled={processing} className="bg-emerald-600 border-b-4 border-emerald-800 hover:bg-emerald-700 text-white font-black h-16 px-10 rounded-2xl shadow-xl transition-all active:scale-90 active:border-b-0 flex gap-2 animate-in zoom-in"><Zap className="w-6 h-6 fill-white" /> Activate Exam</Button>
-             )}
-             {exam.status === 'ACTIVE' && (!exam.endTime || new Date(exam.endTime) > new Date()) && (
-                <Button onClick={handleComplete} disabled={processing} className="bg-slate-900 border-b-4 border-slate-700 hover:bg-slate-800 text-white font-black h-16 px-10 rounded-2xl shadow-xl transition-all active:scale-90 active:border-b-0 flex gap-2"><StopCircle className="w-6 h-6 text-rose-500" /> Terminate Session</Button>
-             )}
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5"><BookOpen className="size-4" /> {exam.subject?.name}</span>
+            <span className="inline-flex items-center gap-1.5"><Clock className="size-4" /> {exam.duration} min</span>
+            <span className="inline-flex items-center gap-1.5"><Users className="size-4" /> {audience}</span>
+            <span className="inline-flex items-center gap-1.5"><CalendarClock className="size-4" /> {schedule}</span>
           </div>
         </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {exam._count?.attempts > 0 || isFrozen ? (
+            <Button asChild variant="outline"><Link href={`/dashboard/teacher/grading/${exam.id}`}><BarChart3 className="size-4" /> Results</Link></Button>
+          ) : null}
+          {canEdit && (
+            <Button variant="outline" onClick={() => setIsEditingMeta(true)}><Settings2 className="size-4" /> Settings</Button>
+          )}
+          {exam.status === 'DRAFT' && (
+            <Button onClick={handlePublish} disabled={processing || exam.questions.length === 0 || marksOver}>
+              <Send className="size-4" /> Publish
+            </Button>
+          )}
+          {exam.status === 'PUBLISHED' && (
+            <Button onClick={handleStart} disabled={processing} variant="success"><Play className="size-4" /> Go live now</Button>
+          )}
+          {exam.status === 'ACTIVE' && (!exam.endTime || new Date(exam.endTime) > new Date()) && (
+            <Button onClick={handleComplete} disabled={processing} variant="destructive"><StopCircle className="size-4" /> End exam</Button>
+          )}
+        </div>
+      </div>
 
-        {isEditingMeta && (
-           <Card className="border-none shadow-2xl rounded-[40px] overflow-hidden animate-in fade-in slide-in-from-top-10 duration-500 my-6">
-              <div className="bg-gradient-to-r from-indigo-600 to-slate-900 h-2 w-full" />
-              <CardHeader className="p-10 pb-4"><CardTitle className="text-2xl font-black">Assessment Calibration</CardTitle></CardHeader>
-              <CardContent className="p-10 pt-4">
-                 <div className="grid md:grid-cols-4 gap-8">
-                    <div className="md:col-span-2 space-y-3">
-                       <Label className="font-black text-xs uppercase opacity-40">Asset Name</Label>
-                       <Input value={metaForm.title} onChange={e => setMetaForm({...metaForm, title: e.target.value})} className="h-14 rounded-2xl bg-muted/20 border-none font-bold text-lg px-6" />
-                    </div>
-                    <div className="space-y-3">
-                       <Label className="font-black text-xs uppercase opacity-40">Time Cap (Mins)</Label>
-                       <Input type="number" value={metaForm.duration} onChange={e => setMetaForm({...metaForm, duration: e.target.value})} className="h-14 rounded-2xl bg-muted/20 border-none font-black text-lg px-6" />
-                    </div>
-                    <div className="space-y-3">
-                       <Label className="font-black text-xs uppercase opacity-40">Points Ceiling</Label>
-                       <Input type="number" value={metaForm.totalMarks} onChange={e => setMetaForm({...metaForm, totalMarks: e.target.value})} className="h-14 rounded-2xl bg-muted/20 border-none font-black text-lg px-6" />
-                    </div>
-                    <div className="md:col-span-2 space-y-3">
-                       <Label className="font-black text-xs uppercase opacity-40">Target Branch</Label>
-                       <select className="w-full h-14 rounded-2xl bg-muted/20 border-none font-bold px-6 appearance-none" value={metaForm.branchId} onChange={(e) => handleBranchChange(e.target.value)}>
-                          <option value="">Select Target Branch...</option>
-                          {branches?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                       </select>
-                    </div>
-                    <div className="md:col-span-2 space-y-3">
-                       <Label className="font-black text-xs uppercase opacity-40">Target Batch</Label>
-                       <select className="w-full h-14 rounded-2xl bg-muted/20 border-none font-bold px-6 appearance-none" value={metaForm.batchId} onChange={(e) => setMetaForm({ ...metaForm, batchId: e.target.value })} disabled={!metaForm.branchId}>
-                          <option value="">All Students in Branch</option>
-                          {availableBatches?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                       </select>
-                    </div>
-                    <div className="md:col-span-2 space-y-3">
-                       <Label className="font-black text-xs uppercase opacity-40">Schedule: Start</Label>
-                       <Input type="datetime-local" value={metaForm.startTime} onChange={e => setMetaForm({...metaForm, startTime: e.target.value})} className="h-14 rounded-2xl bg-muted/20 border-none font-bold px-6" />
-                    </div>
-                    <div className="md:col-span-2 space-y-3">
-                        <Label className="font-black text-xs uppercase opacity-40">Schedule: End</Label>
-                        <Input type="datetime-local" value={metaForm.endTime} onChange={e => setMetaForm({...metaForm, endTime: e.target.value})} className="h-14 rounded-2xl bg-muted/20 border-none font-bold px-6" />
-                     </div>
-                     <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                        <div 
-                          onClick={() => setMetaForm({ ...metaForm, shuffleQuestions: !metaForm.shuffleQuestions })}
-                          className={`p-6 rounded-[28px] border-2 cursor-pointer transition-all flex items-center justify-between ${metaForm.shuffleQuestions ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-muted/10 hover:border-indigo-100'}`}
-                        >
-                           <div className="flex gap-4 items-center">
-                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${metaForm.shuffleQuestions ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                                 <RotateCcw className="w-5 h-5" />
-                              </div>
-                              <div>
-                                 <p className="font-black text-xs uppercase tracking-tight">Shuffle Questions</p>
-                                 <p className="text-[10px] font-bold text-muted-foreground uppercase opacity-60">Randomize sequence per student</p>
-                              </div>
-                           </div>
-                           <div className={`w-12 h-6 rounded-full relative transition-all ${metaForm.shuffleQuestions ? 'bg-indigo-600' : 'bg-slate-200'}`}>
-                              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${metaForm.shuffleQuestions ? 'left-7' : 'left-1'}`} />
-                           </div>
-                        </div>
-                        <div 
-                          onClick={() => setMetaForm({ ...metaForm, shuffleOptions: !metaForm.shuffleOptions })}
-                          className={`p-6 rounded-[28px] border-2 cursor-pointer transition-all flex items-center justify-between ${metaForm.shuffleOptions ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-muted/10 hover:border-indigo-100'}`}
-                        >
-                           <div className="flex gap-4 items-center">
-                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${metaForm.shuffleOptions ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                                 <HelpCircle className="w-5 h-5" />
-                              </div>
-                              <div>
-                                 <p className="font-black text-xs uppercase tracking-tight">Shuffle Options</p>
-                                 <p className="text-[10px] font-bold text-muted-foreground uppercase opacity-60">Randomize Choices (A,B,C,D)</p>
-                              </div>
-                           </div>
-                           <div className={`w-12 h-6 rounded-full relative transition-all ${metaForm.shuffleOptions ? 'bg-indigo-600' : 'bg-slate-200'}`}>
-                              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${metaForm.shuffleOptions ? 'left-7' : 'left-1'}`} />
-                           </div>
-                        </div>
-                     </div>
-                     <div className="md:col-span-4 flex items-center gap-4 pt-4 border-t border-muted/10 mt-2">
-                       <Button variant="ghost" onClick={() => setIsEditingMeta(false)} className="h-14 flex-1 rounded-2xl font-black uppercase text-[11px]">Discard</Button>
-                       <Button onClick={handleSaveMeta} disabled={processing} className="h-14 flex-1 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black flex gap-2 uppercase text-[11px]"><Save className="w-5 h-5" /> Save</Button>
-                    </div>
-                 </div>
-              </CardContent>
-           </Card>
-        )}
+      {/* Readiness */}
+      {exam.status === 'DRAFT' && (
+        <div className="rounded-xl border bg-card p-4 shadow-xs">
+          <p className="text-sm font-medium text-foreground">Ready to publish?</p>
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {checklist.map((c) => (
+              <li key={c.label} className="flex items-start gap-2 text-sm">
+                {c.warn ? <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+                  : c.done ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success-foreground" />
+                  : <Circle className={`mt-0.5 size-4 shrink-0 ${c.optional ? "text-muted-foreground/50" : "text-warning-foreground"}`} />}
+                <span className={c.warn ? "text-destructive" : c.done ? "text-foreground" : "text-muted-foreground"}>{c.label}</span>
+              </li>
+            ))}
+          </ul>
+          {marksOver && <p className="mt-3 text-xs text-destructive">Questions add up to more than the exam total — remove a question or raise the total in Settings.</p>}
+          {!marksOk && !marksOver && exam.questions.length > 0 && <p className="mt-3 text-xs text-muted-foreground">Tip: the exam total is {exam.totalMarks}; scores are calculated out of that number.</p>}
+        </div>
+      )}
 
-        {/* Main Grid: Adaptive Layout */}
-        <div className={`grid gap-12 items-start mt-6 ${
-          (exam.status === 'ACTIVE' || exam.status === 'COMPLETED') 
-            ? 'grid-cols-1 max-w-4xl mx-auto' 
-            : 'lg:grid-cols-2 w-full'
-        }`}>
-          
-          {/* Left Panel: Question Registry */}
-          {!(exam.status === 'ACTIVE' || exam.status === 'COMPLETED') && (
-             <div className="space-y-6 animate-in fade-in slide-in-from-left-5 duration-300">
-                <div className="flex items-center justify-between px-2">
-                   <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-3">
-                      <Search className="w-5 h-5 text-indigo-500" /> Academic Registry
-                   </h3>
-                   <div className="flex items-center gap-3">
-                      {exam.status === 'DRAFT' && (
-                         <>
-                           <Button onClick={() => setIsOcrOpen(true)} className="h-10 px-4 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black text-[10px] uppercase tracking-widest flex items-center gap-2 group transition-all shrink-0">
-                              <ScanSearch className="w-4 h-4 text-indigo-500 group-hover:scale-110 transition-transform" /> AI Import
-                           </Button>
-                           <Button onClick={() => { setEditingQuestion(null); setIsComposerOpen(true); }} className="h-10 px-4 rounded-xl bg-slate-100/50 hover:bg-slate-100 text-slate-700 border border-slate-200 font-black text-[10px] uppercase tracking-widest flex gap-2 shrink-0">
-                              <PlusCircle className="w-4 h-4" /> Create
-                           </Button>
-                         </>
-                      )}
-                      <Badge variant="secondary" className="font-black text-[10px] bg-indigo-50 text-indigo-700 px-4 py-1 rounded-full">{bankQuestions.length} Total</Badge>
-                   </div>
+      {isFrozen && (
+        <div className="flex items-start gap-3 rounded-xl border border-info/30 bg-info/10 p-4 text-sm">
+          <Lock className="mt-0.5 size-4 shrink-0 text-info-foreground" />
+          <p className="text-foreground">
+            {exam.status === 'ACTIVE' ? "This exam is live, so its questions are locked." : "This exam has finished — questions are shown exactly as students saw them."}
+            <span className="text-muted-foreground"> Edits to bank questions create a new copy for future exams.</span>
+          </p>
+        </div>
+      )}
+
+      <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div className={`grid items-start gap-6 ${isFrozen ? "mx-auto max-w-3xl" : "lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"}`}>
+          {/* Question bank */}
+          {!isFrozen && (
+            <section className="rounded-xl border bg-card shadow-xs lg:sticky lg:top-24">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">Question bank</h2>
+                  <p className="text-xs text-muted-foreground">{exam.subject?.name} · {bankQuestions.length} available</p>
                 </div>
-                <div className="relative group">
-                   <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground transition-colors group-focus-within:text-indigo-500" />
-                   <Input placeholder="Search repository..." className="pl-14 h-16 rounded-[24px] bg-white border-muted/20 shadow-custom font-bold text-lg focus:ring-4 focus:ring-indigo-50 transition-all" value={bankSearch} onChange={(e) => setBankSearch(e.target.value)} disabled={exam.status !== 'DRAFT'} />
-                </div>
-                <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-4 custom-scrollbar px-2">
-                   {filteredBank.length === 0 ? (
-                      <div className="p-20 text-center border-4 border-dashed rounded-[40px] bg-muted/5 italic text-muted-foreground/40 font-bold uppercase tracking-widest text-xs">Registry Empty</div>
-                   ) : (
-                      filteredBank.map(q => (
-                        <DraggableBankQuestion key={q.id} question={q} onEdit={(q) => { setEditingQuestion(q); setIsComposerOpen(true); }} onDelete={handleDeleteBankQuestion} onAdd={handleAdd} disabled={exam.status !== 'DRAFT' && exam.status !== 'PUBLISHED'} processing={processing} />
-                      ))
-                   )}
-                </div>
-             </div>
+                {canEdit && (
+                  <div className="flex gap-1.5">
+                    <Button size="sm" variant="outline" onClick={() => setIsOcrOpen(true)} title="Import questions from a PDF or photo"><ScanSearch className="size-4" /> AI import</Button>
+                    <Button size="sm" onClick={() => { setEditingQuestion(null); setIsComposerOpen(true); }}><Plus className="size-4" /> New</Button>
+                  </div>
+                )}
+              </div>
+              <div className="border-b p-3">
+                <SearchInput value={bankSearch} onChange={setBankSearch} placeholder="Search questions…" />
+              </div>
+              <div className="max-h-[60vh] space-y-2 overflow-y-auto p-3">
+                {filteredBank.length === 0 ? (
+                  <EmptyState
+                    icon={FileQuestion}
+                    title={bankQuestions.length === 0 ? "No more questions for this subject" : "No matches"}
+                    description={bankQuestions.length === 0 ? "Write a new question or import a question paper." : "Try another search."}
+                    className="border-0 py-8"
+                  />
+                ) : (
+                  filteredBank.map(q => (
+                    <DraggableBankQuestion key={q.id} question={q} onEdit={(q) => { setEditingQuestion(q); setIsComposerOpen(true); }} onDelete={handleDeleteBankQuestion} onAdd={handleAdd} disabled={!canEdit} processing={processing} />
+                  ))
+                )}
+              </div>
+              {canEdit && filteredBank.length > 0 && <p className="border-t px-4 py-2 text-xs text-muted-foreground">Drag a question onto the paper, or click Add.</p>}
+            </section>
           )}
 
-          {/* Right Panel: Exam Structure */}
-          <div className="space-y-6 bg-slate-50/30 p-8 rounded-[48px] border border-muted/10 min-h-[90vh]">
-             <div className="flex items-center justify-between px-2">
-                <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-3"><FileText className="w-5 h-5 text-indigo-500" /> Assessment Structure</h3>
-                <Badge variant="secondary" className="font-black text-[11px] bg-slate-900 text-white px-5 py-2 rounded-full shadow-lg">{exam.questions.length} Linked</Badge>
-             </div>
-             
-             <SortableContext 
-                id="exam-structure-sortable"
-                items={exam.questions.map(eq => eq.questionId)}
-                strategy={verticalListSortingStrategy}
-             >
+          {/* Exam paper */}
+          <section className="rounded-xl border bg-muted/30 shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-card px-4 py-3 rounded-t-xl">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Exam paper</h2>
+                <p className="text-xs text-muted-foreground">{exam.questions.length} question{exam.questions.length !== 1 ? "s" : ""}{!isFrozen && exam.questions.length > 1 ? " · drag to reorder" : ""}</p>
+              </div>
+              <div className="w-44">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Marks</span>
+                  <span className={`font-semibold tabular-nums ${marksOver ? "text-destructive" : marksOk ? "text-success-foreground" : "text-foreground"}`}>{currentTotalMarks} / {exam.totalMarks}</span>
+                </div>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div className={`h-full rounded-full ${marksOver ? "bg-destructive" : marksOk ? "bg-success" : "bg-primary"}`} style={{ width: `${Math.min(100, (currentTotalMarks / Math.max(exam.totalMarks, 1)) * 100)}%` }} />
+                </div>
+              </div>
+            </div>
+            <div className="p-3">
+              <SortableContext id="exam-structure-sortable" items={exam.questions.map(eq => eq.questionId)} strategy={verticalListSortingStrategy}>
                 <AssessmentDropZone id="exam-structure-droppable">
-                   {exam.questions.length === 0 ? (
-                      <div className="p-40 text-center border-4 border-dashed rounded-[48px] bg-white flex flex-col items-center">
-                         <div className="p-8 bg-indigo-50 rounded-[32px] mb-8 animate-bounce"><ArrowRight className="w-12 h-12 text-indigo-600" /></div>
-                         <h3 className="text-2xl font-black uppercase tracking-tight">Empty Canvas</h3>
-                         <p className="text-xs font-bold text-muted-foreground/40 mt-4 uppercase">Drag assets here to build your exam</p>
-                      </div>
-                   ) : (
-                      exam.questions.map((eq, idx) => (
-                        <SortableExamQuestion key={eq.questionId} id={eq.questionId} index={idx} eq={eq} examStatus={exam.status} onEdit={(q) => { setEditingQuestion(q); setIsComposerOpen(true); }} onDeleteManual={handleRemove} onPurge={handleDeleteBankQuestion} processing={processing} />
-                      ))
-                   )}
+                  {exam.questions.length === 0 ? (
+                    <div className="flex min-h-[40vh] flex-col items-center justify-center rounded-lg border-2 border-dashed bg-card/60 p-8 text-center">
+                      <span className="flex size-11 items-center justify-center rounded-full bg-primary/10 text-primary"><ArrowRight className="size-5" /></span>
+                      <p className="mt-3 font-medium text-foreground">No questions yet</p>
+                      <p className="mt-1 max-w-xs text-sm text-muted-foreground">Drag questions from the bank, click Add, or create a new one.</p>
+                    </div>
+                  ) : (
+                    exam.questions.map((eq, idx) => (
+                      <SortableExamQuestion key={eq.questionId} index={idx} eq={eq} examStatus={exam.status} onEdit={(q) => { setEditingQuestion(q); setIsComposerOpen(true); }} onDeleteManual={handleRemove} processing={processing} />
+                    ))
+                  )}
                 </AssessmentDropZone>
-             </SortableContext>
-          </div>
+              </SortableContext>
+            </div>
+          </section>
         </div>
 
-        <DragOverlay dropAnimation={{
-          sideEffects: defaultDropAnimationSideEffects({
-            styles: {
-              active: {
-                opacity: '0.4',
-              },
-            },
-          }),
-        }}>
-           {activeId && (
-              <div className="flex items-center justify-center">
-                 {(() => {
-                    const bankQ = bankQuestions.find(q => `bank-${q.id}` === activeId);
-                    const examQ = exam.questions.find(eq => eq.questionId === activeId);
-                    if (bankQ) return <QuestionPreview question={bankQ} type="bank" />;
-                    if (examQ) return <QuestionPreview question={examQ.question} type="exam" index={exam.questions.findIndex(q => q.questionId === activeId)} />;
-                    return null;
-                 })()}
-              </div>
-           )}
+        <DragOverlay dropAnimation={{ sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.4' } } }) }}>
+          {activeId && (() => {
+            const bankQ = bankQuestions.find(q => `bank-${q.id}` === activeId);
+            const examQ = exam.questions.find(eq => eq.questionId === activeId);
+            if (bankQ) return <QuestionPreview question={bankQ} type="bank" />;
+            if (examQ) return <QuestionPreview question={examQ.question} type="exam" index={exam.questions.findIndex(q => q.questionId === activeId)} />;
+            return null;
+          })()}
         </DragOverlay>
       </DndContext>
+
+      {/* Settings */}
+      <Modal
+        open={isEditingMeta}
+        onClose={() => setIsEditingMeta(false)}
+        title="Exam settings"
+        description={exam.status === 'PUBLISHED' ? "This exam is published — students see changes immediately." : "These settings can be changed until the exam goes live."}
+        size="lg"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setIsEditingMeta(false)}>Cancel</Button>
+            <Button onClick={handleSaveMeta} disabled={processing}><Save className="size-4" /> Save settings</Button>
+          </>
+        }
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Title" className="sm:col-span-2">
+            <input className={inputClass} value={metaForm.title} onChange={e => setMetaForm({ ...metaForm, title: e.target.value })} />
+          </Field>
+          <Field label="Duration (minutes)">
+            <input type="number" min="1" className={inputClass} value={metaForm.duration} onChange={e => setMetaForm({ ...metaForm, duration: e.target.value })} />
+          </Field>
+          <Field label="Total marks">
+            <input type="number" min="1" className={inputClass} value={metaForm.totalMarks} onChange={e => setMetaForm({ ...metaForm, totalMarks: e.target.value })} />
+          </Field>
+          <Field label="Branch">
+            <select className={selectClass} value={metaForm.branchId} onChange={(e) => handleBranchChange(e.target.value)}>
+              <option value="">Whole college</option>
+              {branches?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Batch">
+            <select className={selectClass} value={metaForm.batchId} onChange={(e) => setMetaForm({ ...metaForm, batchId: e.target.value })} disabled={!metaForm.branchId}>
+              <option value="">All batches in branch</option>
+              {availableBatches?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Opens at" hint="Leave empty to open when published.">
+            <input type="datetime-local" className={inputClass} value={metaForm.startTime} onChange={e => setMetaForm({ ...metaForm, startTime: e.target.value })} />
+          </Field>
+          <Field label="Closes at" hint="Attempts end automatically at this time.">
+            <input type="datetime-local" className={inputClass} value={metaForm.endTime} onChange={e => setMetaForm({ ...metaForm, endTime: e.target.value })} />
+          </Field>
+          <div className="space-y-2 sm:col-span-2">
+            <Toggle checked={metaForm.shuffleQuestions} onChange={(v) => setMetaForm({ ...metaForm, shuffleQuestions: v })} title="Shuffle questions" description="Each student gets the questions in a different order." />
+            <Toggle checked={metaForm.shuffleOptions} onChange={(v) => setMetaForm({ ...metaForm, shuffleOptions: v })} title="Shuffle answer options" description="MCQ options (A, B, C…) appear in a different order per student." />
+          </div>
+          <Field label="Instructions" hint="Shown to students before they start." className="sm:col-span-2">
+            <textarea className={`${inputClass} h-20 py-2`} value={metaForm.description} onChange={e => setMetaForm({ ...metaForm, description: e.target.value })} />
+          </Field>
+        </div>
+      </Modal>
     </div>
   );
 }

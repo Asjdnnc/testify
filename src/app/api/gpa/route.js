@@ -1,26 +1,19 @@
 import { calculateSemesterGPA } from "@/lib/services/grading.service.js";
-import { cookies } from "next/headers";
-
-async function extractUserId() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("testify-token")?.value;
-  if (!token) return null;
-  try {
-    return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).userId;
-  } catch(e) { return null; }
-}
+import { requireAuth, errorResponse } from "@/lib/server-auth.js";
 
 export async function GET(req) {
   try {
-    const studentId = await extractUserId();
-    if (!studentId) return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    const auth = await requireAuth(req, { roles: ["STUDENT"], subscription: true });
 
     const { searchParams } = new URL(req.url);
     const semester = parseInt(searchParams.get('semester') || "1", 10);
+    if (Number.isNaN(semester)) {
+      return Response.json({ success: false, message: "Invalid semester" }, { status: 400 });
+    }
 
-    const result = await calculateSemesterGPA(studentId, semester);
+    const result = await calculateSemesterGPA(auth.userId, semester);
     return Response.json({ success: true, result }, { status: 200 });
   } catch (error) {
-    return Response.json({ success: false, message: error.message }, { status: 400 });
+    return errorResponse(error);
   }
 }

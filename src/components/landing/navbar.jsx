@@ -18,10 +18,10 @@ export function Navbar() {
         </Link>
         
         <div className="hidden md:flex items-center gap-8 text-sm font-medium text-testify-muted">
-          <Link href="#features" className="hover:text-testify-text transition-colors">Features</Link>
-          <Link href="#how-it-works" className="hover:text-testify-text transition-colors">How it works</Link>
-          <Link href="#pricing" className="hover:text-testify-text transition-colors">Pricing</Link>
-          <Link href="#docs" className="hover:text-testify-text transition-colors">Docs</Link>
+          <Link href="/#features" className="hover:text-testify-text transition-colors">Features</Link>
+          <Link href="/#how-it-works" className="hover:text-testify-text transition-colors">How it works</Link>
+          <Link href="/#pricing" className="hover:text-testify-text transition-colors">Pricing</Link>
+          <Link href="/docs" className="hover:text-testify-text transition-colors">Docs</Link>
         </div>
 
         <div className="flex items-center gap-4">

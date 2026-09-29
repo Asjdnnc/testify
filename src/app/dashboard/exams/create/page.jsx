@@ -1,14 +1,7 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import ProtectedRoute from "@/components/auth/protected-route";
-//import CreateExamForm from "@/components/exams/create-exam-form";
-
+// Exam creation lives in the teacher workspace (subject, cohort targeting,
+// plan-limit checks). This legacy route just forwards there.
 export default function CreateExamPage() {
-
-  return (
-    <ProtectedRoute requiredRole="TEACHER">
-      <CreateExamForm />
-    </ProtectedRoute>
-  );
-
+  redirect("/dashboard/teacher/exams");
 }

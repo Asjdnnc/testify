@@ -1,76 +1,90 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
 import { orgClient } from "@/lib/api-client/org.client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { 
-  Plus, 
-  Search, 
-  ClipboardList, 
-  Trash2, 
-  Clock, 
-  ChevronRight,
-  BookOpen,
-  Calendar,
-  AlertCircle,
-  StopCircle
-} from "lucide-react";
-import Link from "next/link";
+import { Plus, ClipboardList, Trash2, StopCircle, BarChart3, ArrowRight, Clock } from "lucide-react";
 import { toast } from "sonner";
+import {
+  PageHeader, Panel, SegmentedTabs, SearchInput, StatusBadge, EmptyState, LoadingState, Modal, Field,
+  inputClass, selectClass,
+} from "@/components/ui/saas";
 
-export default function FacultyExamsPage() {
+const EMPTY_FORM = {
+  title: "", description: "", duration: 60, totalMarks: 100, subjectId: "", semester: 1, branchId: "", batchId: "",
+};
+
+function formatDateTime(date) {
+  if (!date) return null;
+  return new Date(date).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+/** The status students effectively see, accounting for the schedule window. */
+function effectiveStatus(ex) {
+  const now = new Date();
+  if ((ex.status === "ACTIVE" || ex.status === "PUBLISHED") && ex.endTime && new Date(ex.endTime) < now) return "ENDED";
+  if (ex.status === "PUBLISHED" && ex.startTime && new Date(ex.startTime) > now) return "SCHEDULED";
+  if (ex.status === "PUBLISHED") return "OPEN";
+  return ex.status;
+}
+
+const STATUS_UI = {
+  DRAFT: { label: "Draft", tone: "neutral", group: "draft" },
+  SCHEDULED: { label: "Scheduled", tone: "info", group: "scheduled" },
+  OPEN: { label: "Open", tone: "success", group: "live" },
+  ACTIVE: { label: "Live", tone: "success", group: "live" },
+  ENDED: { label: "Ended", tone: "primary", group: "completed" },
+  COMPLETED: { label: "Completed", tone: "primary", group: "completed" },
+};
+
+function FacultyExams() {
   const { user } = useAuth();
-  
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [exams, setExams] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [branches, setBranches] = useState([]);
   const [availableBatches, setAvailableBatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  
-  // Create Modal State
-  const [isAdding, setIsAdding] = useState(false);
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    duration: 60,
-    totalMarks: 100,
-    subjectId: "",
-    semester: 1,
-    branchId: "",
-    batchId: ""
-  });
+  const [tab, setTab] = useState("all");
+  const [isAdding, setIsAdding] = useState(searchParams.get("new") === "1");
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState(EMPTY_FORM);
 
   useEffect(() => {
-    if (user?.collegeId) {
-      loadInitialData();
-    }
+    if (user?.collegeId) loadInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   async function loadInitialData() {
     setLoading(true);
     try {
-        const subRes = await orgClient.subjects.list(user.collegeId);
-        if (subRes.success) setSubjects(subRes.subjects);
-
-        const brRes = await orgClient.branches.list(user.collegeId);
-        if (brRes.success) setBranches(brRes.branches || []);
-
-        const exRes = await orgClient.exams.list();
-        if (exRes.success) setExams(exRes.exams);
+      const [subRes, brRes, exRes] = await Promise.all([
+        orgClient.subjects.list(user.collegeId),
+        orgClient.branches.list(user.collegeId),
+        orgClient.exams.list(),
+      ]);
+      if (subRes.success) setSubjects(subRes.subjects);
+      if (brRes.success) setBranches(brRes.branches || []);
+      if (exRes.success) setExams(exRes.exams);
     } catch (e) {
-        console.error("Load failed", e);
+      console.error("Load failed", e);
     }
     setLoading(false);
   }
 
+  function closeModal() {
+    setIsAdding(false);
+    if (searchParams.get("new")) router.replace("/dashboard/teacher/exams");
+  }
+
   async function handleBranchChange(branchId) {
-    setFormData(prev => ({ ...prev, branchId, batchId: "" }));
+    setFormData((prev) => ({ ...prev, branchId, batchId: "" }));
     setAvailableBatches([]);
     if (branchId) {
       const bRes = await orgClient.batches.list(branchId);
@@ -81,325 +95,221 @@ export default function FacultyExamsPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!formData.subjectId) return toast.error("Select a subject");
-    
+    setSaving(true);
     try {
-        const res = await orgClient.exams.create(formData);
-        if (res.success) {
-          setIsAdding(false);
-          setFormData({
-            title: "", description: "", duration: 60,
-            totalMarks: 100, subjectId: "", semester: 1,
-            branchId: "", batchId: ""
-          });
-          setAvailableBatches([]);
-          loadInitialData();
-        } else {
-          toast.error(res.message || "Draft creation failed");
-        }
-    } catch (e) { toast.error("Draft creation failed"); }
+      const res = await orgClient.exams.create(formData);
+      if (res.success) {
+        toast.success("Draft created — now add questions");
+        setFormData(EMPTY_FORM);
+        setAvailableBatches([]);
+        router.push(`/dashboard/teacher/exams/${res.exam.id}`);
+      } else {
+        toast.error(res.message || "Couldn't create the exam");
+      }
+    } catch {
+      toast.error("Couldn't create the exam");
+    }
+    setSaving(false);
   }
 
   async function handleDelete(id) {
-    if (!confirm("Are you sure? Only DRAFT exams can be deleted.")) return;
-    try {
-        const res = await orgClient.exams.delete(id);
-        if (res.success) loadInitialData();
-        else toast.error(res.message);
-    } catch (e) { toast.error("Deletion failed"); }
+    if (!confirm("Delete this exam? This can't be undone.")) return;
+    const res = await orgClient.exams.delete(id).catch(() => null);
+    if (res?.success) { toast.success("Exam deleted"); loadInitialData(); }
+    else toast.error(res?.message || "Delete failed");
   }
 
   async function handleComplete(id) {
-    if (!confirm("Stop this active assessment immediately? All student work will be saved and sessions closed.")) return;
-    try {
-        const res = await orgClient.exams.complete(id);
-        if (res.success) {
-           toast.success("Exam terminated successfully");
-           loadInitialData();
-        } else {
-           toast.error(res.message);
-        }
-    } catch (e) { toast.error("Termination failed"); }
+    if (!confirm("End this exam now? Students still writing will be submitted automatically.")) return;
+    const res = await orgClient.exams.complete(id).catch(() => null);
+    if (res?.success) { toast.success("Exam ended"); loadInitialData(); }
+    else toast.error(res?.message || "Couldn't end the exam");
   }
 
-  const filteredExams = (exams || []).filter(ex => 
-    ex.title.toLowerCase().includes(searchQuery.toLowerCase())
+  const withStatus = useMemo(() => exams.map((ex) => ({ ...ex, _status: effectiveStatus(ex) })), [exams]);
+  const counts = useMemo(() => {
+    const c = { all: withStatus.length, draft: 0, scheduled: 0, live: 0, completed: 0 };
+    withStatus.forEach((ex) => { c[STATUS_UI[ex._status].group]++; });
+    return c;
+  }, [withStatus]);
+
+  const filtered = withStatus.filter(
+    (ex) =>
+      (tab === "all" || STATUS_UI[ex._status].group === tab) &&
+      ex.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const formatDateTime = (date) => {
-    if (!date) return null;
-    return new Date(date).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const getStatusColor = (status, startTime, endTime) => {
-    const now = new Date();
-    
-    // Auto-complete if endTime is passed
-    if ((status === 'ACTIVE' || status === 'PUBLISHED') && endTime && new Date(endTime) < now) {
-      return 'bg-slate-100 text-slate-500 border-slate-200';
-    }
-
-    if (status === 'PUBLISHED' && startTime && new Date(startTime) > now) {
-      return 'bg-amber-50 text-amber-600 border-amber-200';
-    }
-    switch (status) {
-      case 'DRAFT': return 'bg-slate-100 text-slate-600 border-slate-200';
-      case 'PUBLISHED': return 'bg-indigo-50 text-indigo-700 border-indigo-100';
-      case 'ACTIVE': return 'bg-emerald-100 text-emerald-800 border-emerald-200 animate-pulse';
-      case 'COMPLETED': return 'bg-slate-100 text-slate-500 border-slate-200';
-      default: return 'bg-muted text-muted-foreground';
-    }
-  };
-
   return (
-    <div className="space-y-8 container mx-auto pb-12">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-           <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg transition-transform hover:scale-105">
-              <ClipboardList className="w-8 h-8 text-white" />
-           </div>
-           <div>
-              <h1 className="text-3xl font-black tracking-tight">Assessment Console</h1>
-              <p className="text-muted-foreground mt-1 font-medium tracking-tight">Design, schedule, and snapshot institutional exams.</p>
-           </div>
-        </div>
-        <Button 
-          onClick={() => setIsAdding(true)} 
-          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-12 px-6 rounded-xl shadow-lg transition-all active:scale-95"
-        >
-          <Plus className="w-5 h-5 mr-2" /> Design New Exam
-        </Button>
-      </header>
+    <div className="space-y-6">
+      <PageHeader
+        title="Exams"
+        description="Create, schedule and monitor your assessments."
+        actions={<Button onClick={() => setIsAdding(true)}><Plus className="size-4" /> New exam</Button>}
+      />
 
-      {isAdding && (
-        <Card className="border-2 border-indigo-500/20 shadow-2xl overflow-hidden relative animate-in slide-in-from-top-4 duration-300">
-          <div className="h-1.5 bg-indigo-600 w-full" />
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-               <CardTitle className="text-xl font-bold">Initiate Assessment Draft</CardTitle>
-               <CardDescription>Define the core parameters and context for this exam.</CardDescription>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => setIsAdding(false)} className="rounded-full text-muted-foreground hover:text-indigo-600 transition-colors">
-               Cancel
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-8">
-                 <div className="space-y-4">
-                    <div className="space-y-2">
-                       <Label className="font-bold text-indigo-900 dark:text-indigo-100">Exam Title</Label>
-                       <Input 
-                          placeholder="e.g. Mid-Semester Theory Exam 2024"
-                          value={formData.title}
-                          onChange={(e) => setFormData({...formData, title: e.target.value})}
-                          required
-                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="font-bold text-indigo-900 dark:text-indigo-100">Academic Subject</Label>
-                      <select 
-                        className="w-full h-11 rounded-xl border border-muted-foreground/20 bg-background px-3 py-2 text-sm focus:ring-4 focus:ring-indigo-100 transition-all font-medium"
-                        value={formData.subjectId}
-                        onChange={(e) => setFormData({...formData, subjectId: e.target.value})}
-                        required
-                      >
-                        <option value="">-- Choose Subject --</option>
-                        {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="font-bold text-indigo-900 dark:text-indigo-100">Target Branch</Label>
-                      <select
-                        className="w-full h-11 rounded-xl border border-muted-foreground/20 bg-background px-3 py-2 text-sm focus:ring-4 focus:ring-indigo-100 transition-all font-medium"
-                        value={formData.branchId}
-                        onChange={(e) => handleBranchChange(e.target.value)}
-                      >
-                        <option value="">All Branches (College-Wide)</option>
-                        {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="font-bold text-indigo-900 dark:text-indigo-100">
-                        Target Batch <span className="font-normal text-muted-foreground text-xs">(optional)</span>
-                      </Label>
-                      <select
-                        className="w-full h-11 rounded-xl border border-muted-foreground/20 bg-background px-3 py-2 text-sm focus:ring-4 focus:ring-indigo-100 transition-all font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-                        value={formData.batchId}
-                        onChange={(e) => setFormData({...formData, batchId: e.target.value})}
-                        disabled={!formData.branchId}
-                      >
-                        <option value="">All Students in Branch</option>
-                        {availableBatches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-2">
-                          <Label className="font-bold text-indigo-900 dark:text-indigo-100">Duration (Mins)</Label>
-                          <Input 
-                             type="number"
-                             value={formData.duration}
-                             onChange={(e) => setFormData({...formData, duration: e.target.value})}
-                             required
-                          />
-                       </div>
-                       <div className="space-y-2">
-                          <Label className="font-bold text-indigo-900 dark:text-indigo-100">Semester</Label>
-                          <Input 
-                             type="number"
-                             value={formData.semester}
-                             onChange={(e) => setFormData({...formData, semester: e.target.value})}
-                             required
-                          />
-                       </div>
-                    </div>
-                 </div>
-                 <div className="space-y-4">
-                    <div className="space-y-2">
-                       <Label className="font-bold text-indigo-900 dark:text-indigo-100">Description / Instructions</Label>
-                       <textarea 
-                          className="w-full h-[152px] rounded-xl border border-muted-foreground/20 bg-background px-4 py-3 text-sm focus:ring-4 focus:ring-indigo-100 transition-all outline-none"
-                          placeholder="Guidelines for students appearing in the exam..."
-                          value={formData.description}
-                          onChange={(e) => setFormData({...formData, description: e.target.value})}
-                       />
-                    </div>
-                    <div className="space-y-2">
-                        <Label className="font-bold text-indigo-900 dark:text-indigo-100">Total Marks (Cap)</Label>
-                        <Input 
-                           type="number"
-                           value={formData.totalMarks}
-                           onChange={(e) => setFormData({...formData, totalMarks: e.target.value})}
-                           required
-                        />
-                    </div>
-                 </div>
-              </div>
-              <Button type="submit" className="w-full h-14 bg-slate-900 hover:bg-slate-800 text-white font-bold text-lg rounded-2xl shadow-xl transition-all active:scale-[0.98]">
-                 Initialize Assessment Build
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Registry Search */}
-      <div className="relative group">
-         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-indigo-600 transition-colors" />
-         <Input 
-            placeholder="Search by assessment title..." 
-            className="pl-12 h-14 text-lg rounded-2xl border-muted/20 shadow-sm focus:ring-4 focus:ring-indigo-50 transition-all bg-card"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-         />
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <SegmentedTabs
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "all", label: "All", count: counts.all },
+            { value: "draft", label: "Drafts", count: counts.draft },
+            { value: "scheduled", label: "Scheduled", count: counts.scheduled },
+            { value: "live", label: "Live", count: counts.live },
+            { value: "completed", label: "Completed", count: counts.completed },
+          ]}
+          className="overflow-x-auto"
+        />
+        <SearchInput value={searchQuery} onChange={setSearchQuery} placeholder="Search exams…" className="lg:w-72" />
       </div>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-         {loading ? (
-            <div className="col-span-full py-20 text-center animate-pulse text-muted-foreground font-black uppercase tracking-widest italic">Decrypting examination catalog...</div>
-         ) : filteredExams.length === 0 ? (
-            <div className="col-span-full py-24 text-center border-2 border-dashed rounded-[32px] bg-muted/20 flex flex-col items-center">
-               <AlertCircle className="w-12 h-12 text-muted-foreground opacity-20 mb-4" />
-               <h3 className="text-xl font-bold text-muted-foreground uppercase tracking-tight">Registry Empty</h3>
-               <p className="text-muted-foreground mt-2 max-w-xs font-medium italic">Initiate your first draft assessment to begin the examination lifecycle.</p>
-            </div>
-         ) : filteredExams.map((ex) => (
-            <Card key={ex.id} className="group relative overflow-hidden shadow-sm hover:shadow-2xl transition-all border-muted/20 hover:border-indigo-500/20 rounded-[28px] flex flex-col">
-               <div className="p-1.5 flex flex-col h-full">
-                  <div className="p-6 pb-4 space-y-4 flex-1">
-                     <div className="flex items-center justify-between">
-                        <Badge variant="outline" className={`font-black tracking-widest uppercase text-[10px] py-1 border-opacity-50 ${getStatusColor(ex.status, ex.startTime, ex.endTime)}`}>
-                           {ex.endTime && new Date(ex.endTime) < new Date() && (ex.status === 'ACTIVE' || ex.status === 'PUBLISHED') ? 'COMPLETED' : 
-                            (ex.status === 'PUBLISHED' && ex.startTime && new Date(ex.startTime) > new Date() ? 'SCHEDULED' : ex.status)}
-                        </Badge>
-                        <div className="flex items-center gap-1.5 text-muted-foreground text-[10px] font-black uppercase tracking-tighter">
-                           <Clock className="w-3.5 h-3.5" />
-                           {ex.duration} Mins
-                        </div>
-                     </div>
-                     
-                     <Link href={`/dashboard/teacher/exams/${ex.id}`}>
-                        <h2 className="text-xl font-black leading-tight text-slate-800 dark:text-white group-hover:text-indigo-600 transition-colors line-clamp-2">
-                           {ex.title}
-                        </h2>
-                     </Link>
-
-                     <div className="grid grid-cols-2 gap-2 pt-2">
-                        <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
-                           <BookOpen className="w-4 h-4 text-indigo-400" />
-                           <span className="truncate">{ex.subject?.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
-                           <Calendar className="w-4 h-4 text-indigo-400" />
-                           <span>Sem {ex.semester}</span>
-                        </div>
-                     </div>
-
-                     {(ex.startTime || ex.endTime) && (
-                        <div className="pt-4 space-y-2 border-t border-muted/5">
-                           <div className="text-[9px] font-black uppercase text-muted-foreground/40 tracking-widest">Schedule Window</div>
-                           <div className="grid grid-cols-2 gap-2">
-                              {ex.startTime && (
-                                 <div className="flex flex-col">
-                                    <span className="text-[8px] font-bold text-muted-foreground/60 uppercase">Starts</span>
-                                    <span className="text-[10px] font-black">{formatDateTime(ex.startTime)}</span>
-                                 </div>
-                              )}
-                              {ex.endTime && (
-                                 <div className="flex flex-col">
-                                    <span className="text-[8px] font-bold text-muted-foreground/60 uppercase">Ends</span>
-                                    <span className="text-[10px] font-black">{formatDateTime(ex.endTime)}</span>
-                                 </div>
-                              )}
-                           </div>
-                        </div>
-                     )}
-                  </div>
-
-                  <div className="mt-auto px-6 py-4 flex items-center justify-between border-t border-dashed bg-muted/5 group-hover:bg-indigo-50/10 transition-colors">
-                     <div className="flex -space-x-2">
-                        <div className="w-8 h-8 rounded-full border-2 border-white bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-700">
-                           {ex._count.questions}
-                        </div>
-                        <div className="text-[10px] font-bold text-muted-foreground ml-4 flex items-center">
-                           Questions
-                        </div>
-                     </div>
-                     
-                     <div className="flex items-center gap-1">
-                        {(ex.status === 'COMPLETED' || (ex.endTime && new Date(ex.endTime) < new Date())) && (
-                           <Link href={`/dashboard/teacher/grading/${ex.id}`}>
-                              <Button variant="outline" size="sm" className="h-9 px-4 rounded-xl border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50 font-black uppercase text-[9px] flex gap-2">
-                                 <ClipboardList className="w-3.5 h-3.5" />
-                                 Results
-                              </Button>
-                           </Link>
-                        )}
-                        {ex.status === 'DRAFT' && (
-                           <Button variant="ghost" size="icon" onClick={() => handleDelete(ex.id)} className="h-9 w-9 text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors rounded-full">
-                              <Trash2 className="w-4 h-4" />
-                           </Button>
-                        )}
-                        {ex.status === 'ACTIVE' && (!ex.endTime || new Date(ex.endTime) > new Date()) && (
-                           <Button variant="ghost" size="icon" onClick={() => handleComplete(ex.id)} className="h-9 w-9 text-rose-500 hover:bg-rose-50 transition-colors rounded-full">
-                              <StopCircle className="w-5 h-5" />
-                           </Button>
-                        )}
-                        <Link href={`/dashboard/teacher/exams/${ex.id}`}>
-                           <Button size="icon" className="h-9 w-9 bg-slate-900 hover:bg-slate-800 text-white rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95">
-                              <ChevronRight className="w-5 h-5" />
-                           </Button>
+      <Panel noPadding>
+        {loading ? (
+          <LoadingState label="Loading exams…" />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon={ClipboardList}
+            title={exams.length === 0 ? "No exams yet" : "No exams match"}
+            description={exams.length === 0 ? "Create a draft, add questions from your bank, then publish it to a batch." : "Try a different tab or search term."}
+            action={exams.length === 0 && <Button size="sm" onClick={() => setIsAdding(true)}><Plus className="size-4" /> New exam</Button>}
+            className="m-5"
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-5 py-3 font-medium">Exam</th>
+                  <th className="px-5 py-3 font-medium">Status</th>
+                  <th className="hidden px-5 py-3 font-medium md:table-cell">Schedule</th>
+                  <th className="hidden px-5 py-3 text-right font-medium sm:table-cell">Questions</th>
+                  <th className="hidden px-5 py-3 text-right font-medium sm:table-cell">Attempts</th>
+                  <th className="px-5 py-3"><span className="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filtered.map((ex) => {
+                  const ui = STATUS_UI[ex._status];
+                  const canGrade = ["ENDED", "COMPLETED"].includes(ex._status) || ex._count?.attempts > 0;
+                  return (
+                    <tr key={ex.id} className="group hover:bg-muted/30">
+                      <td className="px-5 py-3.5">
+                        <Link href={`/dashboard/teacher/exams/${ex.id}`} className="block min-w-0">
+                          <p className="truncate font-medium text-foreground group-hover:text-primary">{ex.title}</p>
+                          <p className="mt-0.5 flex items-center gap-2 truncate text-xs text-muted-foreground">
+                            {ex.subject?.name}{ex.semester ? ` · Sem ${ex.semester}` : ""}
+                            <span className="inline-flex items-center gap-1"><Clock className="size-3" /> {ex.duration} min</span>
+                          </p>
                         </Link>
-                     </div>
-                  </div>
-               </div>
-            </Card>
-         ))}
-      </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <StatusBadge tone={ui.tone} dot>{ui.label}</StatusBadge>
+                      </td>
+                      <td className="hidden px-5 py-3.5 text-xs text-muted-foreground md:table-cell">
+                        {ex.startTime || ex.endTime ? (
+                          <>
+                            {ex.startTime && <div>{formatDateTime(ex.startTime)}</div>}
+                            {ex.endTime && <div>→ {formatDateTime(ex.endTime)}</div>}
+                          </>
+                        ) : (
+                          "No time window"
+                        )}
+                      </td>
+                      <td className="hidden px-5 py-3.5 text-right tabular-nums text-foreground sm:table-cell">{ex._count?.questions ?? 0}</td>
+                      <td className="hidden px-5 py-3.5 text-right tabular-nums text-foreground sm:table-cell">{ex._count?.attempts ?? 0}</td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center justify-end gap-1">
+                          {canGrade && (
+                            <Button asChild variant="ghost" size="sm" title="Results">
+                              <Link href={`/dashboard/teacher/grading/${ex.id}`}><BarChart3 className="size-4" /><span className="hidden xl:inline">Results</span></Link>
+                            </Button>
+                          )}
+                          {ex.status === "ACTIVE" && ex._status !== "ENDED" && (
+                            <Button variant="ghost" size="icon-sm" onClick={() => handleComplete(ex.id)} title="End exam now" className="text-destructive hover:bg-destructive/10 hover:text-destructive">
+                              <StopCircle className="size-4" />
+                            </Button>
+                          )}
+                          {(ex.status === "DRAFT" || ex.status === "PUBLISHED") && (
+                            <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(ex.id)} title="Delete" className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
+                              <Trash2 className="size-4" />
+                            </Button>
+                          )}
+                          <Button asChild variant="ghost" size="icon-sm" title="Open">
+                            <Link href={`/dashboard/teacher/exams/${ex.id}`}><ArrowRight className="size-4" /></Link>
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+
+      <Modal
+        open={isAdding}
+        onClose={closeModal}
+        title="New exam"
+        description="Create a draft. You'll add questions and publish it on the next screen."
+        size="lg"
+        footer={
+          <>
+            <Button variant="outline" onClick={closeModal}>Cancel</Button>
+            <Button type="submit" form="new-exam-form" disabled={saving}>{saving ? "Creating…" : "Create draft"}</Button>
+          </>
+        }
+      >
+        <form id="new-exam-form" onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+          <Field label="Title" className="sm:col-span-2">
+            <input className={inputClass} placeholder="e.g. Data Structures — Mid-semester" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} required />
+          </Field>
+          <Field label="Subject">
+            <select className={selectClass} value={formData.subjectId} onChange={(e) => setFormData({ ...formData, subjectId: e.target.value })} required>
+              <option value="">Select a subject</option>
+              {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Semester">
+            <input type="number" min="1" className={inputClass} value={formData.semester} onChange={(e) => setFormData({ ...formData, semester: e.target.value })} />
+          </Field>
+          <Field label="Branch" hint="Leave empty to make it available college-wide.">
+            <select className={selectClass} value={formData.branchId} onChange={(e) => handleBranchChange(e.target.value)}>
+              <option value="">All branches</option>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Batch" hint="Optional — narrow to one graduating batch.">
+            <select className={selectClass} value={formData.batchId} onChange={(e) => setFormData({ ...formData, batchId: e.target.value })} disabled={!formData.branchId}>
+              <option value="">All students in branch</option>
+              {availableBatches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Duration (minutes)">
+            <input type="number" min="1" className={inputClass} value={formData.duration} onChange={(e) => setFormData({ ...formData, duration: e.target.value })} required />
+          </Field>
+          <Field label="Total marks">
+            <input type="number" min="1" className={inputClass} value={formData.totalMarks} onChange={(e) => setFormData({ ...formData, totalMarks: e.target.value })} required />
+          </Field>
+          <Field label="Instructions" hint="Shown to students before they start." className="sm:col-span-2">
+            <textarea
+              className={`${inputClass} h-24 py-2`}
+              placeholder="e.g. Answer all questions. Calculators are not allowed."
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            />
+          </Field>
+        </form>
+      </Modal>
     </div>
+  );
+}
+
+export default function FacultyExamsPage() {
+  return (
+    <Suspense fallback={<LoadingState label="Loading exams…" />}>
+      <FacultyExams />
+    </Suspense>
   );
 }

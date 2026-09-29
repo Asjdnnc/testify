@@ -40,10 +40,10 @@ export default function SuperAdminHome() {
   }, []);
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Platform Overview</h1>
-        <p className="text-muted-foreground mt-1 text-sm">Manage all institutions and subscription plans from here.</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Platform overview</h1>
+        <p className="text-muted-foreground mt-1 text-sm">Every college on Testify, their subscriptions and plans.</p>
       </div>
 
       {loading ? (
@@ -105,9 +105,9 @@ export default function SuperAdminHome() {
           </h2>
           <div className="space-y-3">
             {[
-              { label: "Active (Paid)", value: stats.activeCount, color: "bg-emerald-500", total: stats.collegeCount },
-              { label: "Trial", value: stats.trialCount, color: "bg-amber-500", total: stats.collegeCount },
-              { label: "Suspended / Expired", value: stats.suspendedCount, color: "bg-red-500", total: stats.collegeCount },
+              { label: "Active (Paid)", value: stats.activeCount, color: "bg-success", total: stats.collegeCount },
+              { label: "Trial", value: stats.trialCount, color: "bg-warning", total: stats.collegeCount },
+              { label: "Suspended / Expired", value: stats.suspendedCount, color: "bg-destructive", total: stats.collegeCount },
             ].map((row) => {
               const pct = stats.collegeCount > 0 ? Math.round((row.value / stats.collegeCount) * 100) : 0;
               return (

@@ -1,47 +1,48 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "@/context/auth-context";
 import Link from "next/link";
+import { useAuth } from "@/context/auth-context";
+import { useSetupProgress, SetupChecklist } from "@/components/dashboard/admin-setup-guide";
 import {
-  GitBranch, Users, GraduationCap, BookOpen, CreditCard,
-  AlertTriangle, CheckCircle2, Clock, ArrowRight,
-  Zap, Loader2, LayoutDashboard, TrendingUp,
+  GitBranch, Users, GraduationCap, BookOpen, ClipboardList, CreditCard, ArrowRight, AlertTriangle, Layers, UserPlus,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  firstName, PageHeader, Panel, StatCard, StatusBadge, SUBSCRIPTION_TONE } from "@/components/ui/saas";
 
-const STATUS_CONFIG = {
-  TRIAL:        { label: "Free Trial",    dot: "bg-amber-400",   banner: "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-300" },
-  TRIAL_EXPIRED:{ label: "Trial Expired", dot: "bg-red-400",     banner: "bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-300" },
-  ACTIVE:       { label: "Active",        dot: "bg-emerald-400", banner: "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-300" },
-  SUSPENDED:    { label: "Suspended",     dot: "bg-orange-400",  banner: "bg-orange-500/10 border-orange-500/20 text-orange-600 dark:text-orange-300" },
-  CANCELLED:    { label: "Cancelled",     dot: "bg-red-400",     banner: "bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-300" },
-};
+const STATUS_LABEL = { TRIAL: "Free trial", TRIAL_EXPIRED: "Trial expired", ACTIVE: "Active", SUSPENDED: "Suspended", CANCELLED: "Cancelled" };
 
 function daysUntil(date) {
   if (!date) return null;
-  const diff = new Date(date) - new Date();
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  return Math.max(0, Math.ceil((new Date(date) - new Date()) / 864e5));
 }
 
-function StatCard({ icon: Icon, label, value, sub, href, accent }) {
-  const inner = (
-    <div className={`bg-card border rounded-2xl p-5 space-y-3 transition-all group ${href ? "hover:border-primary/30 cursor-pointer" : ""}`}>
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${accent || "bg-primary/10"}`}>
-        <Icon className="w-5 h-5 text-primary" />
+function SetupCard() {
+  const guide = useSetupProgress();
+  if (!guide.loaded || guide.complete) return null;
+  return (
+    <Panel title="Finish setting up your college" description="Complete these steps so teachers can create exams and students can take them.">
+      <SetupChecklist guide={guide} />
+    </Panel>
+  );
+}
+
+function Meter({ label, current, max }) {
+  const unlimited = max == null;
+  const pct = unlimited ? 100 : Math.min(100, Math.round((current / Math.max(max, 1)) * 100));
+  const tone = unlimited ? "bg-success/40" : pct >= 100 ? "bg-destructive" : pct >= 80 ? "bg-warning" : "bg-primary";
+  return (
+    <div>
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-medium tabular-nums text-foreground">{current}<span className="text-muted-foreground"> / {unlimited ? "∞" : max}</span></span>
       </div>
-      <div>
-        <p className="text-muted-foreground text-xs font-medium">{label}</p>
-        <p className="text-2xl font-bold text-foreground mt-0.5">{value ?? "—"}</p>
-        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
       </div>
-      {href && (
-        <div className="flex items-center gap-1 text-primary text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-          Manage <ArrowRight className="w-3 h-3" />
-        </div>
-      )}
     </div>
   );
-  return href ? <Link href={href}>{inner}</Link> : inner;
 }
 
 export default function AdminDashboard() {
@@ -54,157 +55,104 @@ export default function AdminDashboard() {
     Promise.all([
       fetch("/api/dashboard").then((r) => r.json()),
       fetch("/api/account/billing").then((r) => r.json()),
-    ]).then(([statsRes, billingRes]) => {
-      if (statsRes.success) setStats(statsRes.stats);
-      if (billingRes.success) setBilling(billingRes.billing);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    ])
+      .then(([statsRes, billingRes]) => {
+        if (statsRes.success) setStats(statsRes.stats);
+        if (billingRes.success) setBilling(billingRes.billing);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   const status = billing?.subscriptionStatus || "TRIAL";
-  const conf = STATUS_CONFIG[status] || STATUS_CONFIG.TRIAL;
-  const expiryDays = status === "TRIAL" ? daysUntil(billing?.trialEndsAt)
-    : status === "ACTIVE" ? daysUntil(billing?.currentPeriodEnd) : null;
-  const isLocked = status === "TRIAL_EXPIRED" || status === "SUSPENDED" || status === "CANCELLED";
+  const isLocked = ["TRIAL_EXPIRED", "SUSPENDED", "CANCELLED"].includes(status);
+  const expiryDays = status === "TRIAL" ? daysUntil(billing?.trialEndsAt) : status === "ACTIVE" ? daysUntil(billing?.currentPeriodEnd) : null;
+  const c = stats?.college || {};
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
-      {/* Welcome */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Welcome back, {user?.name?.split(" ")[0] || "Admin"} 👋
-        </h1>
-        <p className="text-muted-foreground mt-1 text-sm">Here's an overview of your institution.</p>
-      </div>
+    <div className="space-y-8">
+      <PageHeader
+        title={`Welcome back, ${firstName(user?.name)}`}
+        description={`Here's how ${user?.college?.name || "your college"} is doing.`}
+        actions={
+          <>
+            <Button asChild variant="outline"><Link href="/dashboard/admin/students"><UserPlus className="size-4" /> Add students</Link></Button>
+            <Button asChild><Link href="/dashboard/admin/teachers"><UserPlus className="size-4" /> Invite teachers</Link></Button>
+          </>
+        }
+      />
 
-      {/* Subscription banner */}
-      {billing && (
-        <div className={`border rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${conf.banner}`}>
-          <div className="flex items-center gap-3">
-            <div className={`w-2.5 h-2.5 rounded-full ${conf.dot} animate-pulse shrink-0`} />
+      {isLocked && (
+        <div className="flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
             <div>
-              <p className="font-semibold text-sm">
-                {conf.label} — {billing.plan}
-              </p>
-              <p className="text-xs opacity-70 mt-0.5">
-                {status === "TRIAL" && expiryDays !== null ? `${expiryDays} day${expiryDays !== 1 ? "s" : ""} remaining` :
-                 status === "ACTIVE" && expiryDays !== null ? `Renews in ${expiryDays} day${expiryDays !== 1 ? "s" : ""}` :
-                 "Upgrade to restore access"}
+              <p className="font-medium text-foreground">Your account is read-only</p>
+              <p className="text-sm text-muted-foreground">
+                {status === "TRIAL_EXPIRED" ? "Your free trial has ended." : status === "SUSPENDED" ? "Your subscription has lapsed." : "Your account is cancelled."} Choose a plan to restore full access.
               </p>
             </div>
           </div>
-          <Link
-            href="/dashboard/admin/billing"
-            className="shrink-0 text-xs font-semibold flex items-center gap-1.5 bg-foreground/10 hover:bg-foreground/20 px-3 py-1.5 rounded-lg transition-all"
-          >
-            <CreditCard className="w-3.5 h-3.5" />
-            {isLocked ? "Upgrade Now" : "Manage Billing"}
-          </Link>
+          {status !== "CANCELLED" && <Button asChild size="sm"><Link href="/dashboard/admin/billing">Choose a plan</Link></Button>}
         </div>
       )}
 
-      {/* Access locked */}
-      {isLocked && (
-        <div className="bg-destructive/10 border border-destructive/20 rounded-2xl p-5 text-center space-y-3">
-          <AlertTriangle className="w-7 h-7 text-destructive mx-auto" />
-          <div>
-            <h3 className="text-destructive font-semibold">Platform access restricted</h3>
-            <p className="text-destructive/70 text-sm mt-1">
-              {status === "TRIAL_EXPIRED" ? "Your free trial has ended. Upgrade to add data and take exams."
-               : status === "SUSPENDED" ? "Your account has been suspended by the platform admin."
-               : "Your account is cancelled. Contact support to restore."}
-            </p>
+      <SetupCard />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={GraduationCap} label="Students" value={c.studentCount ?? 0} hint="Across all batches" tone="primary" loading={loading} href="/dashboard/admin/students" />
+        <StatCard icon={Users} label="Teachers" value={c.teacherCount ?? 0} hint="Faculty accounts" tone="info" loading={loading} href="/dashboard/admin/teachers" />
+        <StatCard icon={ClipboardList} label="Exams" value={c.examTotal ?? 0} hint="Created by your teachers" tone="success" loading={loading} />
+        <StatCard icon={GitBranch} label="Branches" value={c.branchCount ?? 0} hint="Academic departments" tone="warning" loading={loading} href="/dashboard/admin/branches" />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Panel
+          title="Subscription"
+          actions={<Link href="/dashboard/admin/billing" className="text-sm font-medium text-primary hover:underline">Manage</Link>}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xl font-semibold text-foreground">{billing?.plan || "Trial"}</p>
+              <p className="text-sm text-muted-foreground">
+                {status === "TRIAL" && expiryDays != null ? `${expiryDays} day${expiryDays !== 1 ? "s" : ""} left in trial`
+                  : status === "ACTIVE" && expiryDays != null ? `Renews in ${expiryDays} day${expiryDays !== 1 ? "s" : ""}`
+                  : "Upgrade to restore access"}
+              </p>
+            </div>
+            <StatusBadge tone={SUBSCRIPTION_TONE[status]} dot>{STATUS_LABEL[status]}</StatusBadge>
           </div>
-          <Link
-            href="/dashboard/admin/billing"
-            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-semibold px-4 py-2 rounded-xl transition-all"
-          >
-            <Zap className="w-4 h-4" /> Choose a Plan
-          </Link>
-        </div>
-      )}
+          {billing?.usage && (
+            <div className="mt-5 space-y-4 border-t pt-5">
+              <Meter label="Teachers" {...billing.usage.teachers} />
+              <Meter label="Students" {...billing.usage.students} />
+              <Meter label="Exams" {...billing.usage.exams} />
+            </div>
+          )}
+          {status === "TRIAL" && (
+            <Button asChild className="mt-5 w-full"><Link href="/dashboard/admin/billing"><CreditCard className="size-4" /> Upgrade plan</Link></Button>
+          )}
+        </Panel>
 
-      {/* Stats */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-primary" />
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard icon={GitBranch} label="Branches" value={stats?.college?.branchCount ?? 0}
-            sub="Academic departments" href="/dashboard/admin/branches" />
-          <StatCard icon={Users} label="Teachers" value={stats?.college?.teacherCount ?? 0}
-            sub="Faculty members" href="/dashboard/admin/teachers" />
-          <StatCard icon={BookOpen} label="Students" value={stats?.college?.studentCount ?? 0}
-            sub="Enrolled students" href="/dashboard/admin/students" />
-          <StatCard icon={CreditCard} label="Plan" value={billing?.plan || "Trial"}
-            sub={conf.label} href="/dashboard/admin/billing" />
-        </div>
-      )}
-
-      {/* Resource usage bars */}
-      {billing?.usage && !isLocked && (
-        <div className="bg-card border rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
-            <TrendingUp className="w-4 h-4 text-primary" /> Resource Usage
-          </h2>
-          <div className="space-y-3">
-            {[
-              { label: "Teachers", ...billing.usage.teachers },
-              { label: "Students", ...billing.usage.students },
-              { label: "Exams",    ...billing.usage.exams },
-            ].map(({ label, current, max }) => {
-              const isUnlimited = max === null;
-              const pct = isUnlimited ? 0 : max > 0 ? Math.min((current / max) * 100, 100) : 0;
-              const isNear = !isUnlimited && pct >= 80;
-              const isAt   = !isUnlimited && pct >= 100;
-              return (
-                <div key={label} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{label}</span>
-                    <span className={`text-xs font-medium ${isAt ? "text-destructive" : isNear ? "text-amber-500" : "text-muted-foreground"}`}>
-                      {isUnlimited ? `${current} / ∞` : `${current} / ${max}`}
-                    </span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${isAt ? "bg-destructive" : isNear ? "bg-amber-500" : "bg-primary"}`}
-                      style={{ width: isUnlimited ? "100%" : `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Quick links */}
-      <div>
-        <h2 className="text-base font-semibold text-foreground mb-4">Quick Actions</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Panel title="Manage your college" className="lg:col-span-2" bodyClassName="grid gap-2 sm:grid-cols-2">
           {[
-            { label: "Manage Branches",  desc: "Add or rename departments",      icon: GitBranch,    href: "/dashboard/admin/branches" },
-            { label: "Manage Batches",   desc: "Organize student groups",        icon: GraduationCap,href: "/dashboard/admin/batches" },
-            { label: "Add Teachers",     desc: "Invite faculty members",         icon: Users,        href: "/dashboard/admin/teachers" },
-            { label: "Add Students",     desc: "Enroll new students",            icon: BookOpen,     href: "/dashboard/admin/students" },
-            { label: "Manage Subjects",  desc: "Define curriculum disciplines",  icon: LayoutDashboard, href: "/dashboard/admin/subjects" },
-            { label: "Billing & Plans",  desc: "Upgrade or cancel subscription", icon: CreditCard,   href: "/dashboard/admin/billing" },
+            { label: "Branches", desc: "Departments such as CSE or ECE", icon: GitBranch, href: "/dashboard/admin/branches" },
+            { label: "Batches", desc: "Student cohorts by graduation year", icon: Layers, href: "/dashboard/admin/batches" },
+            { label: "Subjects", desc: "Courses, codes and credits", icon: BookOpen, href: "/dashboard/admin/subjects" },
+            { label: "Teachers", desc: "Invite and manage faculty", icon: Users, href: "/dashboard/admin/teachers" },
+            { label: "Students", desc: "Enrol individually or in bulk", icon: GraduationCap, href: "/dashboard/admin/students" },
+            { label: "Billing & plan", desc: "Subscription and invoices", icon: CreditCard, href: "/dashboard/admin/billing" },
           ].map((item) => (
-            <Link key={item.href} href={item.href}>
-              <div className="bg-card border hover:border-primary/30 hover:bg-primary/5 rounded-xl p-4 flex items-center gap-3 transition-all group">
-                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <item.icon className="w-4 h-4 text-primary" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-foreground text-sm font-medium">{item.label}</p>
-                  <p className="text-muted-foreground text-xs truncate">{item.desc}</p>
-                </div>
-                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary ml-auto shrink-0 transition-colors" />
+            <Link key={item.href} href={item.href} className="group flex items-center gap-3 rounded-lg border p-3 transition-colors hover:border-primary/40 hover:bg-accent/40">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><item.icon className="size-4" /></span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-foreground">{item.label}</p>
+                <p className="truncate text-xs text-muted-foreground">{item.desc}</p>
               </div>
+              <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
             </Link>
           ))}
-        </div>
+        </Panel>
       </div>
     </div>
   );

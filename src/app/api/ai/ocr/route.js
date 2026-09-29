@@ -1,4 +1,5 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
+import { requireAuth, errorResponse } from "@/lib/server-auth.js";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -58,12 +59,25 @@ const QuestionSchema = {
 
 export const maxDuration = 60; // Next.js allowing up to 60s for Vercel Hobby
 
+const MAX_BASE64_LENGTH = 14 * 1024 * 1024; // ~10MB decoded
+
 export async function POST(req) {
   try {
+    // Paid AI feature: only authenticated staff of a college in good standing
+    await requireAuth(req, { roles: ["TEACHER", "ADMIN"], subscription: true });
+
     const { fileBuffer, mimeType } = await req.json();
 
     if (!fileBuffer || !mimeType) {
        return Response.json({ success: false, message: "Missing file payload" }, { status: 400 });
+    }
+
+    if (mimeType !== "application/pdf" && !String(mimeType).startsWith("image/")) {
+       return Response.json({ success: false, message: "Unsupported file type" }, { status: 415 });
+    }
+
+    if (typeof fileBuffer !== "string" || fileBuffer.length > MAX_BASE64_LENGTH) {
+       return Response.json({ success: false, message: "File is too large (max 10MB)" }, { status: 413 });
     }
 
     if (!process.env.GEMINI_API_KEY) {
@@ -96,7 +110,8 @@ export async function POST(req) {
     });
 
   } catch (e) {
+    if (e.status) return errorResponse(e);
     console.error("[OCR_ENGINE_ERROR]", e);
-    return Response.json({ success: false, message: e.message || "Failed to process document" }, { status: 500 });
+    return Response.json({ success: false, message: "Failed to process document" }, { status: 500 });
   }
 }

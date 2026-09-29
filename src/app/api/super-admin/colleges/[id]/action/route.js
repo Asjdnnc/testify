@@ -1,28 +1,12 @@
 import prisma from "@/lib/prisma.js";
-import { cookies } from "next/headers";
-
-async function requireSuperAdmin() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("testify-token")?.value;
-  if (!token) throw Object.assign(new Error("Unauthorized"), { status: 401 });
-  try {
-    const payload = JSON.parse(
-      Buffer.from(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")
-    );
-    if (payload.role !== "SUPER_ADMIN") throw Object.assign(new Error("Forbidden"), { status: 403 });
-    return payload;
-  } catch (e) {
-    if (e.status) throw e;
-    throw Object.assign(new Error("Invalid token"), { status: 401 });
-  }
-}
+import { requireAuth, errorResponse } from "@/lib/server-auth.js";
 
 // POST /api/super-admin/colleges/[id]/action
 // Super admin can SUSPEND, RESTORE or DELETE a college.
 // Cancellation is the college's own action via /api/account/cancel.
 export async function POST(req, { params }) {
   try {
-    await requireSuperAdmin();
+    await requireAuth(req, { roles: ["SUPER_ADMIN"] });
     const { id } = await params;
     const { action } = await req.json();
 
@@ -66,6 +50,6 @@ export async function POST(req, { params }) {
     const updated = await prisma.college.update({ where: { id }, data: update });
     return Response.json({ success: true, college: updated });
   } catch (err) {
-    return Response.json({ success: false, message: err.message }, { status: err.status || 500 });
+    return errorResponse(err, 500);
   }
 }

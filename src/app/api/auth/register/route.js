@@ -1,27 +1,14 @@
-import { registerUser } from "@/lib/services/auth.service.js";
-
-export async function POST(req) {
-
-  try {
-
-    const body = await req.json();
-
-    const result = await registerUser(body);
-
-    return Response.json({
-      success: true,
-      user: result.user,
-      token: result.token,
-    });
-
-  } catch (error) {
-
-    console.error(error);
-
-    return Response.json({
+// POST /api/auth/register
+// Public self-registration is disabled for this multi-tenant SaaS: every
+// account must belong to a college. Colleges onboard via /get-started and
+// their admins provision teachers & students.
+export async function POST() {
+  return Response.json(
+    {
       success: false,
-      message: error.message,
-    }, { status: 400 });
-  }
-
+      message:
+        "Self-registration is disabled. Ask your institution admin for an account, or register your college at /get-started.",
+    },
+    { status: 403 }
+  );
 }

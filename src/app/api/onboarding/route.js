@@ -26,8 +26,11 @@ export async function POST(req) {
 
     return Response.json({
       success: true,
-      message: "Registration successful! Check your email for the setup link.",
+      message: result.emailFailed
+        ? "Registration successful, but our email service is currently down. We couldn't send the setup link to your email."
+        : "Registration successful! Check your email for the setup link.",
       email: result.email,
+      emailFailed: result.emailFailed,
       // Only expose the direct link in non-production to avoid token leaks via API
       ...(IS_DEV && { setupUrl }),
     });

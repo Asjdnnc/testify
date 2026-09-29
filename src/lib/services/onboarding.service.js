@@ -9,7 +9,7 @@ const TRIAL_DAYS = 3;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
-function generateSetupToken(payload) {
+export function generateSetupToken(payload) {
   return jwt.sign(payload, SETUP_TOKEN_SECRET, { expiresIn: SETUP_TOKEN_EXPIRY });
 }
 
@@ -96,7 +96,12 @@ export async function submitRegistrationForm({
   // Provision immediately (synchronously) — see spec Section 4.2
   const provisionResult = await provisionCollege(registration.id);
 
-  return { success: true, email: contactEmail, setupToken: provisionResult.setupToken };
+  return { 
+    success: true, 
+    email: contactEmail, 
+    setupToken: provisionResult.setupToken,
+    emailFailed: provisionResult.emailFailed
+  };
 }
 
 
@@ -177,6 +182,13 @@ export async function provisionCollege(registrationId) {
     },
   });
 
+  console.log("\n=======================================================");
+  console.log(`[DEBUG] Setup token generated for ${registration.contactEmail}:`);
+  console.log(`Token: ${setupToken}`);
+  console.log("=======================================================\n");
+
+  let emailFailed = false;
+
   // Send welcome email — await it so we can log success/failure clearly
   try {
     const emailResult = await sendWelcomeSetupEmail({
@@ -186,13 +198,20 @@ export async function provisionCollege(registrationId) {
       trialEndsAt,
       setupToken,
     });
-    console.log("[EMAIL] Welcome email sent successfully:", emailResult?.data?.id ?? emailResult);
+    
+    if (emailResult?.error) {
+      console.error("[EMAIL] Failed to send welcome email (API error):", emailResult.error);
+      emailFailed = true;
+    } else {
+      console.log("[EMAIL] Welcome email sent successfully:", emailResult?.data?.id ?? emailResult);
+    }
   } catch (err) {
     // Log the full error — provisioning already succeeded so don't rethrow
-    console.error("[EMAIL] Failed to send welcome email:", JSON.stringify(err?.response?.data || err?.message || err));
+    console.error("[EMAIL] Failed to send welcome email (Exception):", JSON.stringify(err?.response?.data || err?.message || err));
+    emailFailed = true;
   }
 
-  return { college, adminUser, trialEndsAt, setupToken };
+  return { college, adminUser, trialEndsAt, setupToken, emailFailed };
 }
 
 // ─── Step 3: Complete Account Setup ───────────────────────────────────────
@@ -283,6 +302,11 @@ export async function resendSetupLink(email) {
       setupTokenSentAt: new Date(),
     },
   });
+
+  console.log("\n=======================================================");
+  console.log(`[DEBUG] Resend setup token for ${registration.contactEmail}:`);
+  console.log(`Token: ${setupToken}`);
+  console.log("=======================================================\n");
 
   // Fire-and-forget
   sendSetupLinkEmail({

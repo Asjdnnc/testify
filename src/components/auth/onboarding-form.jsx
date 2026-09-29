@@ -45,6 +45,8 @@ export function OnboardingForm() {
   const [submittedEmail, setSubmittedEmail] = useState("");
   const [devSetupUrl, setDevSetupUrl] = useState("");
 
+  const [emailFailed, setEmailFailed] = useState(false);
+
   const [form, setForm] = useState({
     collegeName: "",
     address: "",
@@ -90,7 +92,7 @@ export function OnboardingForm() {
     setError("");
 
     try {
-      await onboardCollegeClient({
+      const result = await onboardCollegeClient({
         collegeName: form.collegeName,
         address: form.address,
         adminName: form.adminName,
@@ -101,6 +103,7 @@ export function OnboardingForm() {
 
       setSubmittedEmail(form.adminEmail);
       if (result.setupUrl) setDevSetupUrl(result.setupUrl);
+      if (result.emailFailed) setEmailFailed(true);
       setDone(true);
     } catch (err) {
       setError(err.message);
@@ -113,34 +116,50 @@ export function OnboardingForm() {
   if (done) {
     return (
       <div className="flex flex-col items-center text-center py-8 gap-6">
-        <div className="w-16 h-16 rounded-full bg-testify-accent/10 border border-testify-accent/30 flex items-center justify-center">
-          <Mail size={32} className="text-testify-accent" />
+        <div className={`w-16 h-16 rounded-full flex items-center justify-center border ${emailFailed ? "bg-red-500/10 border-red-500/30" : "bg-testify-accent/10 border-testify-accent/30"}`}>
+          {emailFailed ? <AlertCircle size={32} className="text-red-500" /> : <Mail size={32} className="text-testify-accent" />}
         </div>
         <div>
-          <h2 className="font-serif text-3xl text-testify-text mb-2">Check your inbox!</h2>
+          <h2 className="font-serif text-3xl text-testify-text mb-2">
+            {emailFailed ? "Registration Successful" : "Check your inbox!"}
+          </h2>
           <p className="text-testify-muted text-base leading-relaxed">
-            We sent a setup link to{" "}
-            <strong className="text-testify-text">{submittedEmail}</strong>.<br />
-            Click the link in the email to set your password and access your dashboard.
+            {emailFailed ? (
+              <>
+                We couldn't send the setup link to <strong className="text-testify-text">{submittedEmail}</strong> because our email service is currently down.
+              </>
+            ) : (
+              <>
+                We sent a setup link to{" "}
+                <strong className="text-testify-text">{submittedEmail}</strong>.<br />
+                Click the link in the email to set your password and access your dashboard.
+              </>
+            )}
           </p>
         </div>
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 text-left max-w-sm">
-          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0 mt-1.5" />
-          <p className="text-xs text-amber-400/90 leading-relaxed">
-            <strong>3-day trial starts now.</strong> The setup link expires in 24 hours — check spam if you don't see it.
-          </p>
-        </div>
-        {devSetupUrl && (
-          <div className="w-full p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20 text-left space-y-2">
-            <p className="text-xs text-indigo-400 font-semibold uppercase tracking-wider">🛠 Dev mode — direct setup link</p>
+        
+        {!emailFailed && (
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 text-left max-w-sm">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0 mt-1.5" />
+            <p className="text-xs text-amber-400/90 leading-relaxed">
+              <strong>3-day trial starts now.</strong> The setup link expires in 24 hours — check spam if you don't see it.
+            </p>
+          </div>
+        )}
+
+        {(devSetupUrl || emailFailed) && (
+          <div className={`w-full p-4 rounded-xl text-left space-y-2 ${emailFailed ? "bg-red-500/5 border border-red-500/20" : "bg-indigo-500/5 border border-indigo-500/20"}`}>
+            <p className={`text-xs font-semibold uppercase tracking-wider ${emailFailed ? "text-red-400" : "text-indigo-400"}`}>
+              {emailFailed ? "Action Required" : "🛠 Dev mode — direct setup link"}
+            </p>
             <p className="text-xs text-testify-muted leading-relaxed">
-              Email delivery requires a verified Resend domain in production. Use this link now:
+              {emailFailed ? "Please use the direct link below to complete your setup and create your password immediately:" : "Email delivery requires a verified Resend domain in production. Use this link now:"}
             </p>
             <a
-              href={devSetupUrl}
-              className="block text-xs text-indigo-400 hover:text-indigo-300 underline break-all transition-colors"
+              href={devSetupUrl || "#"}
+              className={`block text-xs underline break-all transition-colors ${emailFailed ? "text-red-400 hover:text-red-300" : "text-indigo-400 hover:text-indigo-300"}`}
             >
-              {devSetupUrl}
+              {devSetupUrl || "Token link unavailable. Check server console."}
             </a>
           </div>
         )}

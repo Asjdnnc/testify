@@ -1,38 +1,27 @@
 import { updateBatch, deleteBatch } from "@/lib/services/org.service";
-import { cookies } from "next/headers";
-
-async function getAuthContext() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("testify-token")?.value;
-  if (!token) return null;
-  try {
-    return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-  } catch { return null; }
-}
+import { requireAuth, errorResponse } from "@/lib/server-auth.js";
 
 // PATCH /api/org/batch/[id]
 export async function PATCH(req, { params }) {
   try {
-    const auth = await getAuthContext();
-    if (!auth || auth.role !== "ADMIN") return Response.json({ success: false, message: "Forbidden" }, { status: 403 });
+    const auth = await requireAuth(req, { roles: ["ADMIN"], subscription: true });
     const { id } = await params;
     const body = await req.json();
-    const batch = await updateBatch(id, body);
+    const batch = await updateBatch(id, auth.collegeId, body);
     return Response.json({ success: true, batch });
   } catch (error) {
-    return Response.json({ success: false, message: error.message }, { status: 400 });
+    return errorResponse(error);
   }
 }
 
 // DELETE /api/org/batch/[id]
 export async function DELETE(req, { params }) {
   try {
-    const auth = await getAuthContext();
-    if (!auth || auth.role !== "ADMIN") return Response.json({ success: false, message: "Forbidden" }, { status: 403 });
+    const auth = await requireAuth(req, { roles: ["ADMIN"], subscription: true });
     const { id } = await params;
-    await deleteBatch(id);
+    await deleteBatch(id, auth.collegeId);
     return Response.json({ success: true });
   } catch (error) {
-    return Response.json({ success: false, message: error.message }, { status: 400 });
+    return errorResponse(error);
   }
 }

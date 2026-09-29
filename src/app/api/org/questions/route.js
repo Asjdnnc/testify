@@ -1,25 +1,12 @@
 import { createQuestion, getQuestionsByCollege } from "@/lib/services/question.service";
-import { cookies } from "next/headers";
-
-async function getAuthContext() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("testify-token")?.value;
-  if (!token) return null;
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-    return payload;
-  } catch (e) { return null; }
-}
+import { requireAuth, resolveCollegeId, errorResponse } from "@/lib/server-auth.js";
 
 export async function GET(req) {
   try {
-    const auth = await getAuthContext();
-    if (!auth) return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    const auth = await requireAuth(req, { roles: ["TEACHER", "ADMIN", "SUPER_ADMIN"], subscription: true });
 
     const { searchParams } = new URL(req.url);
-    const collegeId = auth.role === "SUPER_ADMIN" ? searchParams.get("collegeId") : auth.collegeId;
-    
-    if (!collegeId) return Response.json({ success: false, message: "Missing college context" }, { status: 400 });
+    const collegeId = resolveCollegeId(auth, searchParams.get("collegeId"));
 
     const filters = {
        subjectId: searchParams.get("subjectId"),
@@ -30,32 +17,25 @@ export async function GET(req) {
     const questions = await getQuestionsByCollege(collegeId, filters);
     return Response.json({ success: true, questions });
   } catch (error) {
-    return Response.json({ success: false, message: error.message }, { status: 500 });
+    return errorResponse(error, 500);
   }
 }
 
 export async function POST(req) {
   try {
-    const auth = await getAuthContext();
     // Only teachers and admins can create questions
-    if (!auth || (auth.role !== "TEACHER" && auth.role !== "ADMIN")) {
-      return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireAuth(req, { roles: ["TEACHER", "ADMIN"], subscription: true });
 
     const body = await req.json();
-    const collegeId = auth.collegeId;
-    const creatorId = auth.userId;
 
-    if (!collegeId) return Response.json({ success: false, message: "No college context found" }, { status: 400 });
-
-    const question = await createQuestion({ 
-      ...body, 
-      collegeId, 
-      creatorId 
+    const question = await createQuestion({
+      ...body,
+      collegeId: auth.collegeId,
+      creatorId: auth.userId
     });
-    
+
     return Response.json({ success: true, question }, { status: 201 });
   } catch (error) {
-    return Response.json({ success: false, message: error.message }, { status: 400 });
+    return errorResponse(error);
   }
 }

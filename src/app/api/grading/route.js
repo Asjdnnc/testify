@@ -1,30 +1,21 @@
 import { gradeSubjectiveAnswer } from "@/lib/services/grading.service.js";
-import { cookies } from "next/headers";
-
-async function extractUserId() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("testify-token")?.value;
-  if (!token) return null;
-  try {
-    return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).userId;
-  } catch(e) { return null; }
-}
+import { requireAuth, errorResponse } from "@/lib/server-auth.js";
 
 export async function POST(req) {
   try {
-    const teacherId = await extractUserId();
-    if (!teacherId) return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    const auth = await requireAuth(req, { roles: ["TEACHER", "ADMIN"], subscription: true });
 
     const body = await req.json();
     const { answerId, marksObtained, feedback } = body;
-    
-    if (!answerId || marksObtained === undefined) {
+
+    const marks = parseFloat(marksObtained);
+    if (!answerId || marksObtained === undefined || marksObtained === null || Number.isNaN(marks)) {
       return Response.json({ success: false, message: "Missing required fields" }, { status: 400 });
     }
 
-    const result = await gradeSubjectiveAnswer(teacherId, answerId, parseFloat(marksObtained), feedback);
+    const result = await gradeSubjectiveAnswer(auth.userId, answerId, marks, feedback);
     return Response.json(result, { status: 200 });
   } catch (error) {
-    return Response.json({ success: false, message: error.message }, { status: 400 });
+    return errorResponse(error);
   }
 }

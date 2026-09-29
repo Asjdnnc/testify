@@ -22,6 +22,7 @@ export async function requestCancellation(collegeId, requestedBy, reason) {
       id: true,
       subscriptionStatus: true,
       currentPeriodEnd: true,
+      deletedAt: true,
       cancellationRequest: true,
     },
   });

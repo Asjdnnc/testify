@@ -22,7 +22,7 @@ export async function POST(req) {
       return Response.json({ success: false, message: "Invalid or expired reset link" }, { status: 400 });
     }
 
-    if (new Date() > new Date(user.resetPasswordExpires)) {
+    if (!user.resetPasswordExpires || new Date() > new Date(user.resetPasswordExpires)) {
        return Response.json({ success: false, message: "This password reset link has expired" }, { status: 400 });
     }
 
@@ -35,7 +35,8 @@ export async function POST(req) {
       data: {
         passwordHash: hashedPassword,
         resetPasswordToken: null,
-        resetPasswordExpires: null
+        resetPasswordExpires: null,
+        requirePasswordChange: false
       }
     });
 

@@ -176,14 +176,11 @@ export default function ManageStudentsPage() {
       {/* Header Section */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <GraduationCap className="w-6 h-6 text-primary" />
-            </div>
-            Student Directory
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-3">
+            Students
           </h1>
           <p className="text-muted-foreground text-sm max-w-md">
-            Manage your institution's student segments. Add students individually or import entire batches via CSV/XLSX.
+            Students belong to a batch within a branch. Add them one at a time or import a spreadsheet.
           </p>
         </div>
 
@@ -213,7 +210,7 @@ export default function ManageStudentsPage() {
         </div>
       )}
       {success && (
-        <div className="flex items-center gap-3 text-emerald-500 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl p-4 text-sm animate-in slide-in-from-top-2 duration-300">
+        <div className="flex items-center gap-3 text-success-foreground bg-emerald-500/5 border border-success/40 rounded-2xl p-4 text-sm animate-in slide-in-from-top-2 duration-300">
           <CheckCircle2 className="w-4 h-4 shrink-0" /> 
           <span>{success}</span>
         </div>
@@ -224,14 +221,14 @@ export default function ManageStudentsPage() {
         <div className="lg:col-span-4 space-y-6">
           
           {/* Context Filter (Persistent) */}
-          <div className="bg-card border rounded-3xl p-6 shadow-sm space-y-5">
-            <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-              <Filter className="w-3.5 h-3.5" /> Segmentation Context
+          <div className="bg-card border rounded-2xl p-6 shadow-sm space-y-5">
+            <h2 className="text-xs font-bold text-muted-foreground tracking-wide flex items-center gap-2">
+              <Filter className="w-3.5 h-3.5" /> Branch & batch
             </h2>
             
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-muted-foreground pl-1">BRANCH</label>
+                <label className="text-xs font-bold text-muted-foreground pl-1">BRANCH</label>
                 <select
                   className="w-full h-11 px-4 text-sm rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer"
                   value={selectedBranchId}
@@ -243,7 +240,7 @@ export default function ManageStudentsPage() {
               </div>
 
               <div className={`space-y-1.5 transition-opacity ${!selectedBranchId && "opacity-40"}`}>
-                <label className="text-[10px] font-bold text-muted-foreground pl-1">BATCH (GRADUATION YEAR)</label>
+                <label className="text-xs font-bold text-muted-foreground pl-1">BATCH (GRADUATION YEAR)</label>
                 <select
                   className="w-full h-11 px-4 text-sm rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer disabled:cursor-not-allowed"
                   value={selectedBatchId}
@@ -258,20 +255,20 @@ export default function ManageStudentsPage() {
           </div>
 
           {/* Registration Mode Content */}
-          <div className="bg-card border rounded-3xl p-6 shadow-sm space-y-6 relative overflow-hidden">
+          <div className="bg-card border rounded-2xl p-6 shadow-sm space-y-6 relative overflow-hidden">
             <div className="relative z-10 space-y-6">
               {activeTab === "single" ? (
                 <>
                   <div className="space-y-1">
                     <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
-                      <UserPlus className="w-4 h-4 text-primary" /> Enroll Student
+                      <UserPlus className="w-4 h-4 text-primary" /> Add a student
                     </h2>
-                    <p className="text-[11px] text-muted-foreground">Register an individual for the selected batch.</p>
+                    <p className="text-[11px] text-muted-foreground">Add one student to the selected batch.</p>
                   </div>
 
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-muted-foreground pl-1 uppercase">Full Name</label>
+                      <label className="text-xs font-bold text-muted-foreground pl-1 ">Full Name</label>
                       <input
                         placeholder="e.g. Rahul Verma"
                         value={formData.name}
@@ -281,7 +278,7 @@ export default function ManageStudentsPage() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-muted-foreground pl-1 uppercase">Email Address</label>
+                      <label className="text-xs font-bold text-muted-foreground pl-1 ">Email Address</label>
                       <input
                         type="email"
                         placeholder="rahul.v@college.edu"
@@ -298,7 +295,7 @@ export default function ManageStudentsPage() {
                       className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-bold text-sm hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/10 group mt-2"
                     >
                       {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4 group-hover:scale-110 transition-transform" />}
-                      Add to Directory
+                      Add student
                     </button>
                   </form>
                 </>
@@ -337,7 +334,7 @@ export default function ManageStudentsPage() {
                         <p className="text-xs font-bold text-foreground truncate max-w-[150px] mx-auto">
                           {batchFile ? batchFile.name : "Click or drag file"}
                         </p>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">XLSX, CSV</p>
+                        <p className="text-xs text-muted-foreground tracking-wider font-semibold">XLSX, CSV</p>
                       </div>
                       <input
                         type="file"
@@ -361,19 +358,19 @@ export default function ManageStudentsPage() {
                   {batchResult && (
                     <div className="p-4 bg-muted/30 rounded-2xl border border-border/50 animate-in fade-in duration-300">
                       <div className="grid grid-cols-2 gap-4 text-center">
-                        <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-2.5">
-                          <p className="text-[10px] font-bold text-muted-foreground uppercase">Success</p>
-                          <p className="text-lg font-bold text-emerald-500">{batchResult.success}</p>
+                        <div className="bg-emerald-500/5 border border-success/40 rounded-xl p-2.5">
+                          <p className="text-xs font-bold text-muted-foreground ">Success</p>
+                          <p className="text-lg font-bold text-success-foreground">{batchResult.success}</p>
                         </div>
                         <div className="bg-destructive/5 border border-destructive/10 rounded-xl p-2.5">
-                          <p className="text-[10px] font-bold text-muted-foreground uppercase">Failed</p>
+                          <p className="text-xs font-bold text-muted-foreground ">Failed</p>
                           <p className="text-lg font-bold text-destructive">{batchResult.failed}</p>
                         </div>
                       </div>
                       {batchResult.errors.length > 0 && (
                         <div className="mt-4 max-h-32 overflow-y-auto pr-2 space-y-1.5 custom-scrollbar">
                           {batchResult.errors.map((err, i) => (
-                            <div key={i} className="flex gap-2 items-start text-[9px] text-muted-foreground leading-relaxed p-1.5 bg-background border border-border/50 rounded-lg">
+                            <div key={i} className="flex gap-2 items-start text-[11px] text-muted-foreground leading-relaxed p-1.5 bg-background border border-border/50 rounded-lg">
                               <span className="text-destructive font-bold shrink-0">ER</span>
                               <span><strong className="text-foreground">{err.email}</strong>: {err.error}</span>
                             </div>
@@ -391,7 +388,7 @@ export default function ManageStudentsPage() {
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs font-bold text-foreground leading-none">Auto-Invites</p>
-                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
                       All new students will receive an official invitation with temporary credentials and secure setup instructions.
                     </p>
                   </div>
@@ -404,11 +401,11 @@ export default function ManageStudentsPage() {
 
         {/* Right Panel: Student list */}
         <div className="lg:col-span-8 space-y-6">
-          <div className="bg-card border rounded-[32px] overflow-hidden shadow-sm flex flex-col h-full min-h-[500px]">
+          <div className="bg-card border rounded-2xl overflow-hidden shadow-sm flex flex-col h-full min-h-[500px]">
             {/* Search and Metadata Header */}
             <div className="p-6 border-b border-border/50 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="space-y-1 shrink-0">
-                <h2 className="text-sm font-bold text-foreground">Cohort Directory</h2>
+                <h2 className="text-sm font-bold text-foreground">Students in batch</h2>
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-primary" />
                   <p className="text-[11px] text-muted-foreground font-semibold">
@@ -437,17 +434,17 @@ export default function ManageStudentsPage() {
                 </div>
               ) : !selectedBatchId ? (
                 <div className="flex flex-col items-center justify-center py-32 text-center px-6">
-                  <div className="w-20 h-20 rounded-3xl bg-muted/50 flex items-center justify-center mb-6">
+                  <div className="w-20 h-20 rounded-2xl bg-muted/50 flex items-center justify-center mb-6">
                     <Layers className="w-8 h-8 text-muted-foreground/40" />
                   </div>
-                  <h3 className="text-base font-bold text-foreground">Select a Segment</h3>
+                  <h3 className="text-base font-bold text-foreground">Choose a branch and batch</h3>
                   <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-2 leading-relaxed">
-                    Choose a branch and batch from the control panel to view enrolled students or add new ones.
+                    Pick a branch and batch on the left to see its students or add new ones.
                   </p>
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-32 text-center px-6 grayscale">
-                  <div className="w-20 h-20 rounded-3xl bg-muted/20 flex items-center justify-center mb-6 border border-dashed border-border">
+                  <div className="w-20 h-20 rounded-2xl bg-muted/20 flex items-center justify-center mb-6 border border-dashed border-border">
                     <UserPlus className="w-8 h-8 text-muted-foreground/30" />
                   </div>
                   <h3 className="text-base font-bold text-muted-foreground">Directory is empty</h3>
@@ -464,13 +461,13 @@ export default function ManageStudentsPage() {
                           {s.name.charAt(0).toUpperCase()}
                         </div>
                         {/* Status Dots */}
-                        <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-background shadow-sm ${s.requirePasswordChange ? "bg-amber-400" : "bg-emerald-500"}`} />
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-background shadow-sm ${s.requirePasswordChange ? "bg-warning" : "bg-success"}`} />
                       </div>
                       
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-foreground text-[14px] truncate leading-none">{s.name}</p>
-                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${s.requirePasswordChange ? "bg-amber-100 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400"}`}>
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold  tracking-wider ${s.requirePasswordChange ? "bg-warning/15 text-warning-foreground dark:bg-amber-400/10 dark:text-warning-foreground" : "bg-success/12 text-success-foreground dark:bg-emerald-400/10 dark:text-success-foreground"}`}>
                             {s.requirePasswordChange ? "Invited" : "Active"}
                           </span>
                         </div>
@@ -505,11 +502,11 @@ export default function ManageStudentsPage() {
             {/* Simple Legend */}
             {selectedBatchId && filtered.length > 0 && (
               <div className="px-6 py-4 bg-muted/20 border-t border-border/50 flex items-center gap-6">
-                <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500" /> ACTIVE (Setup Complete)
+                <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
+                  <div className="w-2 h-2 rounded-full bg-success" /> ACTIVE (Setup Complete)
                 </div>
-                <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground">
-                  <div className="w-2 h-2 rounded-full bg-amber-400" /> INVITED (Pending Setup)
+                <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
+                  <div className="w-2 h-2 rounded-full bg-warning" /> INVITED (Pending Setup)
                 </div>
               </div>
             )}

@@ -1,29 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "@/context/auth-context";
 import Link from "next/link";
+import { useAuth } from "@/context/auth-context";
+import { ClipboardList, Radio, Users, CheckSquare, Plus, FileQuestion, ArrowRight, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
-  BookOpen, Clock, ClipboardCheck, Plus, ArrowRight, Loader2,
-  PenLine, Users, AlertCircle,
-} from "lucide-react";
-
-function StatCard({ icon: Icon, label, value, sub, color, urgent }) {
-  return (
-    <div className={`bg-slate-900 border rounded-2xl p-5 space-y-3 ${urgent ? "border-amber-500/30" : "border-slate-800"}`}>
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color || "bg-indigo-500/10"}`}>
-        <Icon className={`w-5 h-5 ${urgent ? "text-amber-400" : "text-indigo-400"}`} />
-      </div>
-      <div>
-        <p className="text-slate-400 text-xs font-medium">{label}</p>
-        <p className={`text-2xl font-bold mt-0.5 ${urgent && value > 0 ? "text-amber-400" : "text-slate-100"}`}>
-          {value ?? "—"}
-        </p>
-        {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
-      </div>
-    </div>
-  );
-}
+  firstName, PageHeader, Panel, StatCard, StatusBadge, EmptyState, LoadingState, EXAM_STATUS_TONE, humanize,
+} from "@/components/ui/saas";
 
 export default function TeacherDashboard() {
   const { user } = useAuth();
@@ -34,169 +18,108 @@ export default function TeacherDashboard() {
   useEffect(() => {
     Promise.all([
       fetch("/api/dashboard").then((r) => r.json()),
-      fetch("/api/exams").then((r) => r.json()),
-    ]).then(([statsRes, examsRes]) => {
-      if (statsRes.success) setStats(statsRes.stats);
-      if (examsRes.success) setExams(examsRes.exams || []);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+      fetch("/api/org/exams").then((r) => r.json()),
+    ])
+      .then(([statsRes, examsRes]) => {
+        if (statsRes.success) setStats(statsRes.stats);
+        if (examsRes.success) setExams(examsRes.exams || []);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
-  const activeExams = exams.filter((e) => e.status === "ACTIVE");
-  const publishedExams = exams.filter((e) => e.status === "PUBLISHED");
-  const draftExams = exams.filter((e) => e.status === "DRAFT");
+  const count = (s) => exams.filter((e) => e.status === s).length;
+  const pending = stats?.pendingGrades ?? 0;
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-100">
-            Welcome back, {user?.name?.split(" ")[0] || "Teacher"} 👋
-          </h1>
-          <p className="text-slate-400 mt-1 text-sm">Here's what's happening with your exams today.</p>
-        </div>
-        <Link
-          href="/dashboard/exams"
-          className="shrink-0 inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all"
-        >
-          <Plus className="w-4 h-4" /> New Exam
-        </Link>
-      </div>
+    <div className="space-y-8">
+      <PageHeader
+        title={`Welcome back, ${firstName(user?.name)}`}
+        description="Here's what's happening with your exams today."
+        actions={
+          <Button asChild>
+            <Link href="/dashboard/teacher/exams?new=1"><Plus className="size-4" /> New exam</Link>
+          </Button>
+        }
+      />
 
-      {/* Stats */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            icon={BookOpen}
-            label="Total Exams"
-            value={exams.length}
-            sub={`${draftExams.length} draft${draftExams.length !== 1 ? "s" : ""}`}
-          />
-          <StatCard
-            icon={ClipboardCheck}
-            label="Active Now"
-            value={activeExams.length}
-            sub={activeExams.length > 0 ? "Students can attempt" : "None running"}
-          />
-          <StatCard
-            icon={Users}
-            label="Live Attempts"
-            value={stats?.activeAttempts ?? 0}
-            sub="In progress right now"
-          />
-          <StatCard
-            icon={Clock}
-            label="Pending Grades"
-            value={stats?.pendingGrades ?? 0}
-            sub="Subjective answers awaiting review"
-            urgent
-          />
-        </div>
-      )}
-
-      {/* Pending grades alert */}
-      {(stats?.pendingGrades ?? 0) > 0 && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-center justify-between gap-4">
+      {pending > 0 && (
+        <div className="flex flex-col gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+            <AlertCircle className="size-5 shrink-0 text-warning-foreground" />
             <div>
-              <p className="text-amber-300 font-medium text-sm">
-                {stats.pendingGrades} subjective answer{stats.pendingGrades !== 1 ? "s" : ""} awaiting review
+              <p className="text-sm font-medium text-foreground">
+                {pending} submission{pending !== 1 ? "s" : ""} waiting for grading
               </p>
-              <p className="text-amber-400/70 text-xs mt-0.5">Students are waiting for their results</p>
+              <p className="text-xs text-muted-foreground">Students see their final result once written answers are marked.</p>
             </div>
           </div>
-          <Link
-            href="/dashboard/teacher/grading"
-            className="shrink-0 text-xs font-semibold text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 px-3 py-1.5 rounded-lg transition-all"
-          >
-            Grade Now →
-          </Link>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/dashboard/teacher/grading">Start grading <ArrowRight className="size-3.5" /></Link>
+          </Button>
         </div>
       )}
 
-      {/* Recent exams */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-slate-300">Your Exams</h2>
-          <Link href="/dashboard/exams" className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
-            View all <ArrowRight className="w-3 h-3" />
-          </Link>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={ClipboardList} label="Total exams" value={exams.length} hint={`${count("DRAFT")} draft${count("DRAFT") !== 1 ? "s" : ""}`} tone="primary" loading={loading} href="/dashboard/teacher/exams" />
+        <StatCard icon={Radio} label="Live now" value={count("ACTIVE")} hint={`${count("PUBLISHED")} scheduled`} tone="success" loading={loading} />
+        <StatCard icon={Users} label="Students in exams" value={stats?.activeAttempts ?? 0} hint="Attempts in progress" tone="info" loading={loading} />
+        <StatCard icon={CheckSquare} label="To grade" value={pending} hint="Written answers pending" tone="warning" loading={loading} href="/dashboard/teacher/grading" />
+      </div>
 
-        {exams.length === 0 ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center space-y-3">
-            <BookOpen className="w-8 h-8 text-slate-600 mx-auto" />
-            <p className="text-slate-400 font-medium">No exams yet</p>
-            <p className="text-slate-500 text-sm">Create your first exam to get started.</p>
-            <Link
-              href="/dashboard/exams"
-              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all mt-2"
-            >
-              <Plus className="w-4 h-4" /> Create Exam
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {exams.slice(0, 6).map((exam) => {
-              const statusColor = {
-                DRAFT: "bg-slate-700 text-slate-300",
-                PUBLISHED: "bg-blue-500/15 text-blue-400",
-                ACTIVE: "bg-emerald-500/15 text-emerald-400",
-                COMPLETED: "bg-slate-700 text-slate-400",
-              }[exam.status] || "bg-slate-700 text-slate-400";
-
-              return (
-                <Link key={exam.id} href={`/dashboard/exams/${exam.id}`}>
-                  <div className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-4 flex items-center justify-between gap-4 transition-all group">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
-                          {exam.status}
-                        </span>
-                        <p className="text-slate-200 font-medium text-sm truncate">{exam.title}</p>
-                      </div>
-                      <p className="text-slate-500 text-xs mt-1">
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Panel
+          className="lg:col-span-2"
+          title="Recent exams"
+          actions={<Link href="/dashboard/teacher/exams" className="text-sm font-medium text-primary hover:underline">View all</Link>}
+          noPadding
+        >
+          {loading ? (
+            <LoadingState />
+          ) : exams.length === 0 ? (
+            <EmptyState
+              icon={ClipboardList}
+              title="No exams yet"
+              description="Create your first exam, add questions from the bank and publish it to a batch."
+              action={<Button asChild size="sm"><Link href="/dashboard/teacher/exams?new=1"><Plus className="size-4" /> Create exam</Link></Button>}
+              className="m-5"
+            />
+          ) : (
+            <ul className="divide-y">
+              {exams.slice(0, 6).map((exam) => (
+                <li key={exam.id}>
+                  <Link href={`/dashboard/teacher/exams/${exam.id}`} className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-muted/40">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">{exam.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">
                         {exam.subject?.name} · {exam._count?.questions ?? 0} questions · {exam._count?.attempts ?? 0} attempts
                       </p>
                     </div>
-                    <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-indigo-400 shrink-0 transition-colors" />
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                    <StatusBadge tone={EXAM_STATUS_TONE[exam.status]} dot>{humanize(exam.status)}</StatusBadge>
+                    <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
 
-      {/* Quick actions */}
-      <div>
-        <h2 className="text-base font-semibold text-slate-300 mb-4">Quick Actions</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <Panel title="Quick actions" bodyClassName="space-y-2">
           {[
-            { label: "Create Exam", desc: "Draft a new assessment", icon: Plus, href: "/dashboard/exams" },
-            { label: "Question Bank", desc: "Manage your questions", icon: PenLine, href: "/dashboard/teacher/questions" },
-            { label: "Grade Answers", desc: "Review subjective answers", icon: ClipboardCheck, href: "/dashboard/teacher/grading" },
+            { label: "Create an exam", desc: "Draft, add questions, publish", icon: Plus, href: "/dashboard/teacher/exams?new=1" },
+            { label: "Question bank", desc: "Write or import questions", icon: FileQuestion, href: "/dashboard/teacher/questions" },
+            { label: "Grade submissions", desc: "Mark written answers", icon: CheckSquare, href: "/dashboard/teacher/grading" },
           ].map((item) => (
-            <Link key={item.href} href={item.href}>
-              <div className="bg-slate-900 border border-slate-800 hover:border-indigo-500/30 hover:bg-indigo-500/5 rounded-xl p-4 flex items-center gap-3 transition-all group">
-                <div className="w-9 h-9 rounded-lg bg-indigo-500/10 flex items-center justify-center shrink-0">
-                  <item.icon className="w-4 h-4 text-indigo-400" />
-                </div>
-                <div>
-                  <p className="text-slate-200 text-sm font-medium">{item.label}</p>
-                  <p className="text-slate-500 text-xs">{item.desc}</p>
-                </div>
-                <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-indigo-400 ml-auto shrink-0 transition-colors" />
+            <Link key={item.label} href={item.href} className="group flex items-center gap-3 rounded-lg border p-3 transition-colors hover:border-primary/40 hover:bg-accent/40">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><item.icon className="size-4" /></span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-foreground">{item.label}</p>
+                <p className="text-xs text-muted-foreground">{item.desc}</p>
               </div>
+              <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
             </Link>
           ))}
-        </div>
+        </Panel>
       </div>
     </div>
   );

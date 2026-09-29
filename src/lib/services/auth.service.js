@@ -2,90 +2,66 @@ import prisma from "../prisma.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
-export async function registerUser({ name, email, password, role }) {
-
-  if (!name) throw new Error("Name is required");
-  const existingUser = await prisma.user.findUnique({
-    where: { email },
-  });
-
-  if (existingUser) {
-    throw new Error("User already exists");
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  const user = await prisma.user.create({
-    data: {
-      name,
-      email,
-      passwordHash: hashedPassword,
-      role: role.toUpperCase(), // Ensure role is stored in uppercase (e.g., "STUDENT", "TEACHER")
-    },
-    include: { college: { select: { name: true } } }
-  });
-
-  const token = jwt.sign(
+export function signAuthToken(user) {
+  return jwt.sign(
     {
       userId: user.id,
       email: user.email,
       role: user.role,
       collegeId: user.collegeId,
-      branchId: user.branchId,
-      batchId: user.batchId,
+      branchId: user.branchId || null,
+      batchId: user.batchId || null,
     },
     process.env.JWT_SECRET,
     {
+      algorithm: "HS256",
       expiresIn: "7d",
     }
   );
-
-  const { passwordHash: _, requirePasswordChange: __, ...safeUser } = { ...user, requirePasswordChange: user.requirePasswordChange };
-  return {
-    token,
-    user: { ...safeUser, requirePasswordChange: user.requirePasswordChange },
-  };
 }
 
+// NOTE: public self-registration was removed. In a multi-tenant SaaS every
+// user must belong to a college, so accounts are created only through
+// onboarding (college admins) or by an ADMIN (teachers / students).
+
 export async function loginUser({ email, password }) {
+  if (!email || !password) throw new Error("Email and password are required");
 
   const user = await prisma.user.findUnique({
     where: { email },
-    include: { college: { select: { name: true } } }
+    include: { college: { select: { name: true, deletedAt: true } } }
   });
 
+  // Same message for unknown email and wrong password — prevents account enumeration
+  const invalid = new Error("Invalid email or password");
+
   if (!user) {
-    throw new Error("User not found");
+    throw invalid;
   }
 
   const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
   if (!isPasswordValid) {
-    throw new Error("Invalid password");
+    throw invalid;
   }
 
-  const token = jwt.sign(
-    {
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      collegeId: user.collegeId,
-      branchId: user.branchId,
-      batchId: user.batchId,
-    },
-    process.env.JWT_SECRET,
-    {
-      expiresIn: "7d",
-    }
-  );
+  if (user.role !== "SUPER_ADMIN" && (!user.collegeId || user.college?.deletedAt)) {
+    throw new Error("This institution account is no longer active. Please contact support.");
+  }
 
-  //we dont want to gieve the password back to the user, so we destructure it out and return the rest of the user data as safeUser
-  const { passwordHash: _, ...safeUser } = user;
+  const token = signAuthToken(user);
 
-    return {
+  //we dont want to give the password back to the user, so we destructure it out and return the rest of the user data as safeUser
+  const { passwordHash: _, resetPasswordToken: __, resetPasswordExpires: ___, college, ...safeUser } = user;
+
+  return {
     token,
-    user: { ...safeUser, requirePasswordChange: user.requirePasswordChange },
-    };
+    user: {
+      ...safeUser,
+      college: college ? { name: college.name } : null,
+      requirePasswordChange: user.requirePasswordChange,
+    },
+  };
 }
 
 /**
@@ -98,11 +74,13 @@ export async function updateUserPassword(userId, newPassword) {
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
 
-  return prisma.user.update({
+  await prisma.user.update({
     where: { id: userId },
     data: {
       passwordHash,
       requirePasswordChange: false // Clear the flag
     }
   });
+
+  return { success: true };
 }

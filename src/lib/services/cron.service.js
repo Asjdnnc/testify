@@ -1,5 +1,6 @@
 import prisma from "../prisma.js";
 import { autoGradeAttempt } from "./grading.service.js";
+import { generateSetupToken } from "./onboarding.service.js";
 import {
   sendTrialExpiredEmail,
   sendSubscriptionExpiredEmail,
@@ -67,13 +68,18 @@ export async function forceSubmitAttempts() {
 
   let processed = 0;
   for (const attempt of attempts) {
-    await prisma.$transaction(async (tx) => {
-      await tx.attempt.update({
-        where: { id: attempt.id },
-        data: { status: "TIMED_OUT", submittedAt: new Date() },
-      });
-      await autoGradeAttempt(attempt.id, tx);
+    // Conditional update: skip if the student submitted in the meantime
+    const { count } = await prisma.attempt.updateMany({
+      where: { id: attempt.id, status: "IN_PROGRESS" },
+      data: { status: "TIMED_OUT", submittedAt: new Date() },
     });
+    if (count === 0) continue;
+
+    try {
+      await autoGradeAttempt(attempt.id);
+    } catch (err) {
+      console.error(`[CRON forceSubmitAttempts] grading failed for ${attempt.id}:`, err);
+    }
     processed++;
   }
 
@@ -165,7 +171,8 @@ export async function processCancellations() {
 
 /**
  * Job 5: scheduleDeletions
- * TRIAL_EXPIRED colleges > 30 days since expiry → set scheduledDeletionAt
+ * TRIAL_EXPIRED colleges > 30 days since expiry → set scheduledDeletionAt,
+ * and soft-delete colleges whose scheduledDeletionAt has passed.
  */
 export async function scheduleDeletions() {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -188,6 +195,20 @@ export async function scheduleDeletions() {
     });
     processed++;
   }
+
+  // Execute due deletions (still unpaid) → soft delete; hard delete follows after 90 days
+  const due = await prisma.college.updateMany({
+    where: {
+      scheduledDeletionAt: { lt: new Date() },
+      subscriptionStatus: "TRIAL_EXPIRED",
+      deletedAt: null,
+    },
+    data: {
+      deletedAt: new Date(),
+      deletionReason: "TRIAL_EXPIRED_NO_PAYMENT",
+    },
+  });
+  processed += due.count;
 
   return { processed };
 }
@@ -217,7 +238,9 @@ export async function hardDeleteColleges() {
 
 /**
  * Job 7: remindUnsetupAdmins
- * isProvisioned=true, setupCompletedAt=null, 3 days since setupTokenSentAt → reminder email
+ * isProvisioned=true, setupCompletedAt=null, 3 days since setupTokenSentAt → reminder email.
+ * The original token has been cleared by expireSetupTokens (24h), so a fresh
+ * one is issued. Updating setupTokenSentAt also prevents re-sending every run.
  */
 export async function remindUnsetupAdmins() {
   const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
@@ -237,13 +260,25 @@ export async function remindUnsetupAdmins() {
 
   let processed = 0;
   for (const reg of registrations) {
-    if (!reg.setupToken || !reg.college) continue;
+    if (!reg.college || !reg.adminUserId) continue;
+
+    const setupToken = generateSetupToken({
+      registrationId: reg.id,
+      userId: reg.adminUserId,
+      email: reg.contactEmail,
+      purpose: "account_setup",
+    });
+
+    await prisma.collegeRegistration.update({
+      where: { id: reg.id },
+      data: { setupToken, setupTokenSentAt: new Date() },
+    });
 
     sendSetupReminderEmail({
       to: reg.contactEmail,
       contactName: reg.contactName,
       collegeName: reg.college.name,
-      setupToken: reg.setupToken,
+      setupToken,
     }).catch((err) =>
       console.error(`[CRON remindUnsetupAdmins] email error for ${reg.id}:`, err)
     );

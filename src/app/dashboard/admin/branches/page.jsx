@@ -13,7 +13,7 @@ import Link from "next/link";
 function ConfirmModal({ message, onConfirm, onCancel, loading }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-      <div className="bg-card border rounded-3xl p-8 shadow-2xl w-full max-w-sm space-y-6 animate-in zoom-in duration-200">
+      <div className="bg-card border rounded-2xl p-8 shadow-2xl w-full max-w-sm space-y-6 animate-in zoom-in duration-200">
         <div className="w-12 h-12 rounded-2xl bg-destructive/10 flex items-center justify-center mx-auto">
           <Trash2 className="w-6 h-6 text-destructive" />
         </div>
@@ -145,12 +145,9 @@ export default function BranchesPage() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-2">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-[24px] bg-primary/10 flex items-center justify-center border border-primary/20 shadow-inner">
-              <Network className="w-7 h-7 text-primary" />
-            </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">Program Departments</h1>
-              <p className="text-muted-foreground text-[13px] font-medium italic">Architect your institution's academic landscape.</p>
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">Branches</h1>
+              <p className="text-muted-foreground text-sm">Departments in your college, like Computer Science or Electronics. Create batches for each graduation year.</p>
             </div>
           </div>
         </div>
@@ -161,11 +158,11 @@ export default function BranchesPage() {
         {error && (
             <div className="flex items-center gap-2 text-destructive bg-destructive/5 border border-destructive/10 rounded-2xl p-4 text-xs animate-in slide-in-from-top-2">
             <AlertCircle className="w-4 h-4 shrink-0" /> {error}
-            <button onClick={() => setError("")} className="ml-auto underline font-bold uppercase tracking-tighter text-[10px]">Dismiss</button>
+            <button onClick={() => setError("")} className="ml-auto underline font-bold tracking-tight text-xs">Dismiss</button>
             </div>
         )}
         {success && (
-            <div className="flex items-center gap-2 text-emerald-500 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl p-4 text-xs animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-2 text-success-foreground bg-emerald-500/5 border border-success/40 rounded-2xl p-4 text-xs animate-in slide-in-from-top-2">
             <Check className="w-4 h-4 shrink-0" /> {success}
             </div>
         )}
@@ -174,17 +171,17 @@ export default function BranchesPage() {
       <div className="grid gap-8 lg:grid-cols-12">
         {/* Create Workspace */}
         <div className="lg:col-span-5">
-           <div className="bg-card border rounded-[32px] p-8 shadow-sm space-y-6 h-fit sticky top-24">
+           <div className="bg-card border rounded-2xl p-8 shadow-sm space-y-6 h-fit sticky top-24">
                 <div className="space-y-1">
-                    <h2 className="text-sm font-bold text-foreground uppercase tracking-widest flex items-center gap-2">
-                        <Plus className="w-4 h-4 text-primary" /> New Department
+                    <h2 className="text-sm font-bold text-foreground tracking-wide flex items-center gap-2">
+                        <Plus className="w-4 h-4 text-primary" /> New branch
                     </h2>
                     <p className="text-[11px] text-muted-foreground font-medium">Add a branch and initialize academic years.</p>
                 </div>
 
                 <form onSubmit={handleCreate} className="space-y-6">
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-muted-foreground tracking-widest uppercase pl-1">Branch Name</label>
+                        <label className="text-xs font-semibold text-muted-foreground tracking-wide pl-1">Branch Name</label>
                         <input
                             placeholder="e.g. Mechanical Engineering"
                             value={newName}
@@ -197,13 +194,13 @@ export default function BranchesPage() {
                     {/* Batch Linkage Selection */}
                     <div className="space-y-3">
                         <div className="flex items-center justify-between pl-1">
-                            <label className="text-[10px] font-black text-muted-foreground tracking-widest uppercase italic">Initialize Academic Cycles</label>
-                            <span className="text-[10px] font-bold text-primary">{selectedYears.length} Selected</span>
+                            <label className="text-xs font-semibold text-muted-foreground tracking-wide ">Batches to create</label>
+                            <span className="text-xs font-bold text-primary">{selectedYears.length} Selected</span>
                         </div>
                         
-                        <div className="bg-muted/30 rounded-[24px] p-5 border border-border/50 max-h-48 overflow-y-auto custom-scrollbar">
+                        <div className="bg-muted/30 rounded-xl p-5 border border-border/50 max-h-48 overflow-y-auto custom-scrollbar">
                             {batchYears.length === 0 ? (
-                                <p className="text-[10px] text-muted-foreground text-center py-4 font-medium italic">No existing batches found. You can add them later.</p>
+                                <p className="text-xs text-muted-foreground text-center py-4 font-medium ">No existing batches found. You can add them later.</p>
                             ) : (
                                 <div className="grid grid-cols-2 gap-3">
                                     {batchYears.map((by) => (
@@ -220,7 +217,7 @@ export default function BranchesPage() {
                                 </div>
                             )}
                         </div>
-                        <p className="text-[9px] text-muted-foreground px-2 leading-relaxed">Selecting years will automatically create 'Batch' records for this branch upon creation.</p>
+                        <p className="text-[11px] text-muted-foreground px-2 leading-relaxed">A batch is created for each year you select.</p>
                     </div>
 
                     <button
@@ -229,7 +226,7 @@ export default function BranchesPage() {
                         className="w-full h-12 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-xl shadow-primary/20 hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                     >
                         {creating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-                        Initialize Branch
+                        Create branch
                     </button>
                 </form>
            </div>
@@ -237,11 +234,11 @@ export default function BranchesPage() {
 
         {/* Directory List */}
         <div className="lg:col-span-7">
-          <div className="bg-card border rounded-[32px] overflow-hidden shadow-sm flex flex-col h-full min-h-[500px]">
+          <div className="bg-card border rounded-2xl overflow-hidden shadow-sm flex flex-col h-full min-h-[500px]">
             <div className="p-6 border-b border-border/40 flex items-center justify-between bg-muted/10">
                 <div className="space-y-0.5">
-                    <h2 className="text-sm font-bold text-foreground">Hierarchy Overview</h2>
-                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">{branches.length} Departments Registered</p>
+                    <h2 className="text-sm font-bold text-foreground">All branches</h2>
+                    <p className="text-xs text-muted-foreground font-bold tracking-wider">{branches.length} branches</p>
                 </div>
             </div>
 
@@ -249,12 +246,12 @@ export default function BranchesPage() {
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-32 space-y-4">
                   <div className="w-12 h-12 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
-                  <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[5px]">Syncing</p>
+                  <p className="text-xs font-semibold text-muted-foreground tracking-[5px]">Syncing</p>
                 </div>
               ) : branches.length === 0 ? (
                 <div className="text-center py-32 space-y-4 opacity-50">
                   <Network className="w-12 h-12 text-muted-foreground/30 mx-auto" />
-                  <p className="text-xs text-muted-foreground font-medium italic">No departments have been established yet.</p>
+                  <p className="text-xs text-muted-foreground font-medium ">No departments have been established yet.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-border/30">
@@ -274,7 +271,7 @@ export default function BranchesPage() {
                             className="flex-1 h-10 px-4 text-sm rounded-xl border border-primary bg-background focus:outline-none shadow-sm shadow-primary/10"
                           />
                           <button onClick={() => handleSaveEdit(branch.id)} disabled={saving}
-                            className="p-2.5 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20">
+                            className="p-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-lg ">
                             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                           </button>
                           <button onClick={() => setEditingId(null)}
@@ -287,8 +284,8 @@ export default function BranchesPage() {
                           <div className="space-y-0.5">
                             <span className="font-bold text-foreground text-[14px]">{branch.name}</span>
                             <div className="flex items-center gap-3">
-                                <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-semibold uppercase tracking-tight">
-                                    <Layers className="w-2.5 h-2.5" /> Core Department
+                                <span className="flex items-center gap-1 text-xs text-muted-foreground font-semibold tracking-tight">
+                                    <Layers className="w-2.5 h-2.5" /> Branch
                                 </span>
                             </div>
                           </div>
@@ -322,7 +319,7 @@ export default function BranchesPage() {
             </div>
             
             {/* Legend */}
-            <div className="p-6 bg-muted/20 border-t border-border/40 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest flex items-center gap-2">
+            <div className="p-6 bg-muted/20 border-t border-border/40 text-xs font-bold text-muted-foreground/60 tracking-wide flex items-center gap-2">
                 <Info className="w-3 h-3" /> Deleting a branch removes all academic data associated with it.
             </div>
           </div>

@@ -10,11 +10,11 @@ import {
 } from "lucide-react";
 
 const STATUS_CONFIG = {
-  TRIAL:        { label: "Free Trial",    icon: Clock,          badge: "bg-amber-500/15 text-amber-500 border border-amber-500/30" },
-  TRIAL_EXPIRED:{ label: "Trial Expired", icon: AlertTriangle,  badge: "bg-red-500/15 text-red-500 border border-red-500/30" },
-  ACTIVE:       { label: "Active",        icon: CheckCircle2,   badge: "bg-emerald-500/15 text-emerald-500 border border-emerald-500/30" },
+  TRIAL:        { label: "Free Trial",    icon: Clock,          badge: "bg-amber-500/15 text-warning-foreground border border-warning/40" },
+  TRIAL_EXPIRED:{ label: "Trial Expired", icon: AlertTriangle,  badge: "bg-red-500/15 text-destructive border border-destructive/40" },
+  ACTIVE:       { label: "Active",        icon: CheckCircle2,   badge: "bg-emerald-500/15 text-success-foreground border border-success/40" },
   SUSPENDED:    { label: "Suspended",     icon: AlertTriangle,  badge: "bg-orange-500/15 text-orange-500 border border-orange-500/30" },
-  CANCELLED:    { label: "Cancelled",     icon: XCircle,        badge: "bg-red-500/15 text-red-500 border border-red-500/30" },
+  CANCELLED:    { label: "Cancelled",     icon: XCircle,        badge: "bg-red-500/15 text-destructive border border-destructive/40" },
 };
 
 export default function CollegeDetailPage() {
@@ -130,7 +130,7 @@ export default function CollegeDetailPage() {
         </div>
       )}
       {successMsg && (
-        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-emerald-600 dark:text-emerald-400 text-sm flex items-center gap-2">
+        <div className="bg-emerald-500/10 border border-success/40 rounded-xl p-4 text-success-foreground dark:text-success-foreground text-sm flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 shrink-0" /> {successMsg}
         </div>
       )}
@@ -226,7 +226,7 @@ export default function CollegeDetailPage() {
             <button
               onClick={() => doAction("RESTORE")}
               disabled={!!actionLoading}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 text-sm font-medium transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-success/40 text-success-foreground dark:text-success-foreground hover:bg-emerald-500/10 text-sm font-medium transition-all disabled:opacity-50"
             >
               {actionLoading === "RESTORE" ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -290,8 +290,8 @@ export default function CollegeDetailPage() {
                     ₹{(p.amountInPaise / 100).toFixed(0)}
                   </span>
                   <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    p.status === "SUCCESS" ? "bg-emerald-500/15 text-emerald-500" :
-                    p.status === "FAILED" ? "bg-red-500/15 text-red-500" :
+                    p.status === "SUCCESS" ? "bg-emerald-500/15 text-success-foreground" :
+                    p.status === "FAILED" ? "bg-red-500/15 text-destructive" :
                     "bg-muted text-muted-foreground"
                   }`}>{p.status}</span>
                 </div>

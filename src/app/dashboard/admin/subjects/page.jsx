@@ -201,12 +201,9 @@ export default function SubjectsPage() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shadow-inner">
-              <BookOpen className="w-6 h-6 text-primary" />
-            </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">Academic Curriculum</h1>
-              <p className="text-muted-foreground text-sm font-medium">Configure subjects, course codes, and credit weighting.</p>
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">Subjects</h1>
+              <p className="text-muted-foreground text-sm font-medium">Courses taught at your college. Credits are used to calculate GPA.</p>
             </div>
           </div>
         </div>
@@ -217,13 +214,13 @@ export default function SubjectsPage() {
             onClick={() => { setActiveTab("single"); setBatchResult(null); }}
             className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 ${activeTab === "single" ? "bg-card text-foreground shadow-sm shadow-primary/5 ring-1 ring-border/10" : "text-muted-foreground hover:text-foreground"}`}
           >
-            <Plus className="w-3.5 h-3.5" /> {isEditing ? "Edit" : "New Sub"}
+            <Plus className="w-3.5 h-3.5" /> {isEditing ? "Edit" : "Add one"}
           </button>
           <button
             onClick={() => { setActiveTab("bulk"); setBatchResult(null); setIsEditing(null); }}
             className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 ${activeTab === "bulk" ? "bg-card text-foreground shadow-sm shadow-primary/5 ring-1 ring-border/10" : "text-muted-foreground hover:text-foreground"}`}
           >
-            <Keyboard className="w-3.5 h-3.5" /> Bulk Text
+            <Keyboard className="w-3.5 h-3.5" /> Paste list
           </button>
           <button
             onClick={() => { setActiveTab("file"); setBatchResult(null); setIsEditing(null); }}
@@ -243,7 +240,7 @@ export default function SubjectsPage() {
             </div>
         )}
         {success && (
-            <div className="flex items-center gap-3 text-emerald-500 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl p-4 text-[13px] animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-3 text-success-foreground bg-emerald-500/5 border border-success/40 rounded-2xl p-4 text-[13px] animate-in slide-in-from-top-2">
             <CheckCircle2 className="w-4 h-4 shrink-0" /> {success}
             </div>
         )}
@@ -252,14 +249,14 @@ export default function SubjectsPage() {
       <div className="grid gap-8 lg:grid-cols-12">
         {/* Left Column: Workspaces */}
         <div className="lg:col-span-5">
-          <div className="bg-card border rounded-[32px] p-8 shadow-sm space-y-8 h-full min-h-[400px]">
+          <div className="bg-card border rounded-2xl p-8 shadow-sm space-y-8 h-full min-h-[400px]">
             
             {activeTab === "single" && (
                 <div className="space-y-6 animate-in fade-in duration-300">
                     <div className="flex items-center justify-between">
                         <div className="space-y-1">
-                            <h2 className="text-lg font-bold text-foreground">{isEditing ? "Modify Subject" : "Direct Enrollment"}</h2>
-                            <p className="text-xs text-muted-foreground font-medium">Define Subject attributes and taxonomy.</p>
+                            <h2 className="text-lg font-bold text-foreground">{isEditing ? "Edit subject" : "Add a subject"}</h2>
+                            <p className="text-xs text-muted-foreground font-medium">Name, optional course code and credits.</p>
                         </div>
                         {isEditing && (
                             <button onClick={() => { setIsEditing(null); setActiveTab("list"); }} className="p-2 rounded-xl bg-muted text-muted-foreground hover:text-foreground transition-all">
@@ -270,7 +267,7 @@ export default function SubjectsPage() {
 
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <div className="space-y-2">
-                           <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Name</label>
+                           <label className="text-[11px] font-bold text-muted-foreground tracking-wide pl-1">Name</label>
                            <input
                              placeholder="e.g. Applied Mathematics II"
                              value={formData.name}
@@ -280,7 +277,7 @@ export default function SubjectsPage() {
                            />
                         </div>
                         <div className="space-y-2">
-                           <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Course Code (Optional)</label>
+                           <label className="text-[11px] font-bold text-muted-foreground tracking-wide pl-1">Course code (optional)</label>
                            <input
                              placeholder="e.g. AMATH201"
                              value={formData.code}
@@ -289,7 +286,7 @@ export default function SubjectsPage() {
                            />
                         </div>
                         <div className="space-y-2">
-                           <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest pl-1">Base Credits</label>
+                           <label className="text-[11px] font-bold text-muted-foreground tracking-wide pl-1">Credits</label>
                            <div className="flex items-center gap-4">
                                 <input
                                     type="range" min="1" max="10"
@@ -307,7 +304,7 @@ export default function SubjectsPage() {
                           className="w-full h-12 rounded-2xl bg-primary text-primary-foreground font-bold text-sm shadow-lg shadow-primary/20 hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2 mt-4"
                         >
                           {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : isEditing ? <Edit3 className="w-5 h-5 transition-transform group-hover:scale-110" /> : <Plus className="w-5 h-5" />}
-                          {isEditing ? "Sync Changes" : "Commit to Curriculum"}
+                          {isEditing ? "Sync Changes" : "Add subject"}
                         </button>
                     </form>
                 </div>
@@ -316,7 +313,7 @@ export default function SubjectsPage() {
             {activeTab === "bulk" && (
                 <div className="space-y-6 animate-in fade-in duration-300">
                     <div className="space-y-1">
-                        <h2 className="text-lg font-bold text-foreground">Smart Entry</h2>
+                        <h2 className="text-lg font-bold text-foreground">Add several at once</h2>
                         <p className="text-xs text-muted-foreground font-medium">Add multiple subjects using natural text formatting.</p>
                     </div>
 
@@ -324,7 +321,7 @@ export default function SubjectsPage() {
                         <Info className="w-4 h-4 text-primary shrink-0" />
                         <span className="text-muted-foreground">
                             Format: <strong className="text-foreground">SubjectName(Code)</strong>, separated by commas.<br/>
-                            Example: <code className="text-primary italic">Math(MAT101), Physics(PHY102), Chemistry</code>
+                            Example: <code className="text-primary ">Math(MAT101), Physics(PHY102), Chemistry</code>
                         </span>
                     </div>
 
@@ -351,7 +348,7 @@ export default function SubjectsPage() {
             {activeTab === "file" && (
                 <div className="space-y-6 animate-in fade-in duration-300">
                     <div className="space-y-1">
-                        <h2 className="text-lg font-bold text-foreground">Data Import</h2>
+                        <h2 className="text-lg font-bold text-foreground">Import from spreadsheet</h2>
                         <p className="text-xs text-muted-foreground font-medium">Upload institutional CSV/XLSX spreadsheets.</p>
                     </div>
 
@@ -362,17 +359,17 @@ export default function SubjectsPage() {
                             setBatchFile(e.dataTransfer.files[0]);
                         }}
                         onClick={() => fileInputRef.current?.click()}
-                        className={`border-2 border-dashed rounded-[32px] p-12 text-center transition-all cursor-pointer group ${batchFile ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-accent/5 focus:bg-accent/10"}`}
+                        className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all cursor-pointer group ${batchFile ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-accent/5 focus:bg-accent/10"}`}
                     >
                         <div className="flex flex-col items-center gap-4">
-                            <div className={`w-16 h-16 rounded-3xl flex items-center justify-center transition-all duration-300 ${batchFile ? "bg-primary text-primary-foreground shadow-xl shadow-primary/20 scale-110" : "bg-muted text-muted-foreground group-hover:scale-105"}`}>
+                            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${batchFile ? "bg-primary text-primary-foreground shadow-xl shadow-primary/20 scale-110" : "bg-muted text-muted-foreground group-hover:scale-105"}`}>
                                 {batchFile ? <CheckCircle2 className="w-8 h-8" /> : <FileUp className="w-8 h-8" />}
                             </div>
                             <div className="space-y-2">
                                 <p className="text-sm font-bold text-foreground px-4 truncate max-w-[200px]">
                                     {batchFile ? batchFile.name : "Drop Curriculum File"}
                                 </p>
-                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">XLSX OR CSV ONLY</p>
+                                <p className="text-xs text-muted-foreground tracking-wide font-semibold opacity-60">XLSX OR CSV ONLY</p>
                             </div>
                             <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.csv" onChange={(e) => setBatchFile(e.target.files[0])} />
                         </div>
@@ -382,7 +379,7 @@ export default function SubjectsPage() {
                          <Download className="w-5 h-5 text-muted-foreground mt-0.5" />
                          <div className="space-y-1">
                              <p className="text-[11px] font-bold text-foreground">File Requirements</p>
-                             <p className="text-[10px] text-muted-foreground leading-relaxed italic">Column headers must include: <strong className="text-primary">'Name'</strong>, <strong className="text-primary">'Code'</strong>, and <strong className="text-primary">'Credits'</strong>.</p>
+                             <p className="text-xs text-muted-foreground leading-relaxed ">Column headers must include: <strong className="text-primary">'Name'</strong>, <strong className="text-primary">'Code'</strong>, and <strong className="text-primary">'Credits'</strong>.</p>
                          </div>
                     </div>
 
@@ -399,19 +396,19 @@ export default function SubjectsPage() {
 
             {/* Performance Snapshot */}
             {batchResult && (
-                <div className="p-5 bg-muted/40 rounded-3xl border border-border/50 animate-in zoom-in-95">
+                <div className="p-5 bg-muted/40 rounded-2xl border border-border/50 animate-in zoom-in-95">
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-[11px] font-black uppercase text-muted-foreground tracking-widest">Process Summary</h3>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                        <h3 className="text-[11px] font-semibold text-muted-foreground tracking-wide">Import summary</h3>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-success-foreground" />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-emerald-500/5 rounded-2xl p-3 border border-emerald-500/10">
-                            <span className="block text-[10px] font-bold text-muted-foreground italic mb-1">Created</span>
-                            <span className="text-xl font-black text-emerald-500">{batchResult.success}</span>
+                        <div className="bg-emerald-500/5 rounded-2xl p-3 border border-success/40">
+                            <span className="block text-xs font-bold text-muted-foreground mb-1">Created</span>
+                            <span className="text-xl font-semibold text-success-foreground">{batchResult.success}</span>
                         </div>
                         <div className="bg-destructive/5 rounded-2xl p-3 border border-destructive/10">
-                            <span className="block text-[10px] font-bold text-muted-foreground italic mb-1">Exceptions</span>
-                            <span className="text-xl font-black text-destructive">{batchResult.failed}</span>
+                            <span className="block text-xs font-bold text-muted-foreground mb-1">Exceptions</span>
+                            <span className="text-xl font-semibold text-destructive">{batchResult.failed}</span>
                         </div>
                     </div>
                 </div>
@@ -421,14 +418,14 @@ export default function SubjectsPage() {
 
         {/* Right Column: Directory Table */}
         <div className="lg:col-span-12 xl:col-span-7">
-          <div className="bg-card border rounded-[32px] overflow-hidden shadow-sm flex flex-col h-full min-h-[600px] transition-all">
+          <div className="bg-card border rounded-2xl overflow-hidden shadow-sm flex flex-col h-full min-h-[600px] transition-all">
             
             {/* Context Header */}
             <div className="p-8 border-b border-border/40 flex flex-col sm:flex-row items-center justify-between gap-6 bg-muted/10">
               <div className="space-y-1 self-start">
                 <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-primary shadow-sm shadow-primary/40 animate-pulse" />
-                    <h2 className="text-base font-bold text-foreground">Institutional Catalog</h2>
+                    <h2 className="text-base font-bold text-foreground">All subjects</h2>
                 </div>
                 <p className="text-xs text-muted-foreground font-medium pl-4">{filtered.length} Subjects active in Curriculum</p>
               </div>
@@ -452,16 +449,16 @@ export default function SubjectsPage() {
                     <div className="w-16 h-16 rounded-full border-[3px] border-primary/10 border-t-primary animate-spin" />
                     <div className="absolute w-8 h-8 rounded-full bg-primary/5 animate-pulse" />
                   </div>
-                  <p className="text-[11px] font-black uppercase text-muted-foreground tracking-[5px]">Refreshing</p>
+                  <p className="text-[11px] font-semibold text-muted-foreground tracking-[5px]">Refreshing</p>
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="text-center py-32 space-y-4 max-w-sm mx-auto opacity-50">
-                  <div className="w-24 h-24 rounded-[32px] bg-muted flex items-center justify-center mx-auto border border-dashed border-border/60">
+                  <div className="w-24 h-24 rounded-2xl bg-muted flex items-center justify-center mx-auto border border-dashed border-border/60">
                     <BookOpen className="w-10 h-10 text-muted-foreground/40" />
                   </div>
                   <div className="space-y-1">
-                      <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">No Records</h3>
-                      <p className="text-xs text-muted-foreground font-medium italic">
+                      <h3 className="text-sm font-bold text-foreground tracking-wider">No subjects yet</h3>
+                      <p className="text-xs text-muted-foreground font-medium ">
                         {searchQuery ? "Refine your search parameters." : "Curriculum directory is currently empty."}
                       </p>
                   </div>
@@ -479,7 +476,7 @@ export default function SubjectsPage() {
                         <div className="flex items-center flex-wrap gap-2">
                             <span className="font-bold text-foreground text-sm truncate">{s.name}</span>
                             {s.code && (
-                                <span className="px-2 py-0.5 rounded-lg bg-primary/10 text-primary text-[10px] font-bold font-mono border border-primary/20 tracking-tighter">
+                                <span className="px-2 py-0.5 rounded-lg bg-primary/10 text-primary text-xs font-bold font-mono border border-primary/20 tracking-tight">
                                     {s.code}
                                 </span>
                             )}
@@ -495,7 +492,7 @@ export default function SubjectsPage() {
                       <div className="flex items-center justify-between sm:justify-end gap-6 sm:gap-10">
                         {/* Inline Controls */}
                         <div className="space-y-1 text-center sm:text-right">
-                           <span className="text-[10px] font-bold text-muted-foreground tracking-widest uppercase block mb-1">Credits</span>
+                           <span className="text-xs font-bold text-muted-foreground tracking-wide block mb-1">Credits</span>
                            <CreditControls 
                              initialValue={s.credits} 
                              onUpdate={(nv) => handleInlineCreditUpdate(s.id, nv)}
@@ -529,10 +526,10 @@ export default function SubjectsPage() {
 
             {/* Bulk Actions / Legend */}
             <div className="p-6 bg-muted/20 border-t border-border/40 flex flex-wrap gap-6 items-center">
-                 <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground/70 uppercase">
+                 <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground/70 ">
                     <Settings2 className="w-3 h-3" /> Quick Scale: Use tabs on the left to batch register.
                  </div>
-                 <div className="ml-auto flex items-center gap-2 text-[10px] font-bold text-muted-foreground/70 uppercase">
+                 <div className="ml-auto flex items-center gap-2 text-xs font-bold text-muted-foreground/70 ">
                     <Hash className="w-3 h-3" /> Inline updates are synced automatically.
                  </div>
             </div>

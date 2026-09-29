@@ -1,12 +1,8 @@
-import TestEngine from "@/components/academic/test-engine";
+import { redirect } from "next/navigation";
 
-export default function TakeExamPage({ params }) {
-  // In a real app we would hit API "START" here using the attemptId or examId passed in params
-  return (
-    <main className="p-6 h-[calc(100vh-64px)] overflow-y-auto bg-secondary/10">
-       <div className="max-w-6xl mx-auto">
-          <TestEngine attemptId={params.id} />
-       </div>
-    </main>
-  );
+// Legacy route kept for old links (e.g. the student dashboard). The real
+// exam flow is /dashboard/student/exams/[id]/lobby → /active.
+export default async function TakeExamPage({ params }) {
+  const { id } = await params;
+  redirect(`/dashboard/student/exams/${encodeURIComponent(id)}/lobby`);
 }

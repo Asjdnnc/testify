@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useFaceProctor } from "@/lib/use-face-proctor";
+import { CameraPreview } from "@/components/proctoring/camera-preview";
+import { FACE_STRIKE_LIMIT } from "@/lib/proctoring-rules";
+import { LoadingState, EmptyState } from "@/components/ui/saas";
 import { useAuth } from "@/context/auth-context";
 import { studentClient } from "@/lib/api-client/student.client";
 import { orgClient } from "@/lib/api-client/org.client";
@@ -22,10 +26,26 @@ import {
   Lock,
   Maximize2,
   CheckCircle2,
-  RotateCcw
+  RotateCcw,
+  ScanFace
 } from "lucide-react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+
+function StepCard({ icon: Icon, tone = "primary", title, children, footer }) {
+  return (
+  <div className="mx-auto max-w-xl rounded-2xl border bg-card p-6 text-center shadow-xs sm:p-8">
+    <span className={`mx-auto flex size-12 items-center justify-center rounded-full ${
+      tone === "success" ? "bg-success/12 text-success-foreground" : tone === "danger" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"
+    }`}>
+      <Icon className="size-6" />
+    </span>
+    <h2 className="mt-4 text-xl font-semibold tracking-tight text-foreground">{title}</h2>
+    <div className="mt-2 text-sm text-muted-foreground">{children}</div>
+    {footer && <div className="mt-6 space-y-3">{footer}</div>}
+  </div>
+);
+}
 
 export default function ExamLobbyPage() {
   const { id } = useParams();
@@ -35,7 +55,25 @@ export default function ExamLobbyPage() {
   const [exam, setExam] = useState(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1); // 1: Info, 2: Hardware, 3: Fullscreen
+  const [currentStep, setCurrentStep] = useState(1); // 1: Info, 2: Hardware, 3: Camera, 4: Fullscreen
+  const TOTAL_STEPS = 4;
+
+  // Camera check: the face must be steadily detected before continuing
+  // Fresh calibration here; the exam page reuses the learned baseline
+  const camera = useFaceProctor({ enabled: currentStep === 3, recalibrate: true });
+  const proctorDebug = useSearchParams().has("proctorDebug");
+  const [faceOkSince, setFaceOkSince] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (camera.status === "ok") setFaceOkSince((prev) => prev ?? Date.now());
+    else setFaceOkSince(null);
+  }, [camera.status]);
+  useEffect(() => {
+    if (currentStep !== 3) return;
+    const t = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(t);
+  }, [currentStep]);
+  const cameraVerified = camera.calibrated && faceOkSince !== null && now - faceOkSince >= 1500;
   const [screenSecurity, setScreenSecurity] = useState({ verified: false, count: 0, error: null });
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -116,183 +154,179 @@ export default function ExamLobbyPage() {
     setStarting(false);
   }
 
-  if (loading) return <div className="p-20 text-center animate-pulse text-muted-foreground font-black uppercase tracking-widest italic text-sm">Synchronizing Gate Registry...</div>;
-  if (!exam) return <div className="p-20 text-center font-black uppercase text-rose-500">Security Access Denied. Registry Corrupted.</div>;
+  if (loading) return <LoadingState label="Loading exam…" />;
+  if (!exam) return (
+    <EmptyState
+      icon={AlertTriangle}
+      title="This exam isn't available"
+      description="It may not be assigned to your batch, or the window has closed."
+      action={<Button asChild variant="outline"><Link href="/dashboard/student/exams">Back to my exams</Link></Button>}
+    />
+  );
+
+  const STEPS = ["Rules", "Display", "Camera", "Start"];
 
   return (
-    <div className="max-w-4xl mx-auto pb-20 mt-12 px-4 space-y-12">
-       {/* Header & Step Track */}
-       <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
-          <div className="flex items-center gap-6">
-             <Link href="/dashboard/student/exams">
-                <Button variant="ghost" size="icon" className="h-14 w-14 rounded-full border border-muted/10 hover:bg-slate-50 transition-all active:scale-95">
-                   <ChevronLeft className="w-7 h-7" />
-                </Button>
+    <div className="mx-auto max-w-4xl space-y-8">
+       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+             <Link href="/dashboard/student/exams" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+                <ChevronLeft className="size-4" /> My exams
              </Link>
-             <div>
-                <h1 className="text-4xl font-black text-slate-900 leading-none tracking-tight italic">ENTRANCE GATEWAY</h1>
-                <p className="text-[10px] font-black text-muted-foreground/60 uppercase tracking-[0.3em] mt-2">Protocol: {exam.title}</p>
+             <h1 className="text-2xl font-semibold tracking-tight text-foreground">{exam.title}</h1>
+             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5"><Clock className="size-4" /> {exam.duration} minutes</span>
+                <span className="inline-flex items-center gap-1.5"><FileText className="size-4" /> {exam.questionCount ?? exam.questions?.length ?? 0} questions · {exam.totalMarks} marks</span>
+                <span className="inline-flex items-center gap-1.5"><ShieldCheck className="size-4" /> Proctored</span>
              </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-             {[1, 2, 3].map(step => (
-                <div key={step} className="flex items-center gap-4">
-                   <div className={`size-10 rounded-2xl flex items-center justify-center font-black text-xs border-2 transition-all ${
-                      currentStep === step ? 'bg-indigo-600 border-indigo-700 text-white shadow-xl shadow-indigo-600/20 scale-110' :
-                      currentStep > step ? 'bg-emerald-500 border-emerald-600 text-white' :
-                      'bg-white border-muted/10 text-slate-300'
-                   }`}>
-                      {currentStep > step ? <CheckCircle2 className="size-5" /> : step}
-                   </div>
-                   {step < 3 && <div className={`w-12 h-0.5 rounded-full ${currentStep > step ? 'bg-emerald-500' : 'bg-slate-100'}`} />}
-                </div>
-             ))}
           </div>
        </div>
 
-       {/* Step Content */}
-       <div className="animate-in fade-in slide-in-from-bottom-10 duration-700">
+       {/* Stepper */}
+       <ol className="grid grid-cols-4 gap-2">
+          {STEPS.map((label, i) => {
+             const step = i + 1;
+             const done = currentStep > step;
+             const active = currentStep === step;
+             return (
+                <li key={label} className="flex flex-col gap-2">
+                   <div className={`h-1.5 rounded-full ${done ? "bg-success" : active ? "bg-primary" : "bg-muted"}`} />
+                   <span className={`flex items-center gap-1.5 text-xs font-medium ${active ? "text-foreground" : "text-muted-foreground"}`}>
+                      {done ? <CheckCircle2 className="size-3.5 text-success-foreground" /> : <span className="tabular-nums">{step}.</span>}
+                      {label}
+                   </span>
+                </li>
+             );
+          })}
+       </ol>
+
+       <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
           {currentStep === 1 && (
-             <div className="grid lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-8">
-                   <Card className="border-none shadow-2xl rounded-[40px] bg-white overflow-hidden border-b-[12px] border-b-indigo-100">
-                      <CardHeader className="p-12 border-b border-muted/5">
-                         <div className="flex items-center gap-4 mb-4">
-                            <Badge className="bg-indigo-50 text-indigo-700 font-black border-none px-4 py-1.5 uppercase text-[10px] tracking-widest italic">Phase 01: Rules of Engagement</Badge>
-                         </div>
-                         <CardTitle className="text-4xl font-black tracking-tight">{exam.title}</CardTitle>
-                         <CardDescription className="font-bold text-slate-400 mt-4 uppercase tracking-[0.1em] text-[11px] flex flex-wrap gap-6">
-                            <span className="flex items-center gap-2.5"><Clock className="w-4 h-4 text-indigo-400" /> {exam.duration}m Duration</span>
-                            <span className="flex items-center gap-2.5 text-emerald-600"><Zap className="w-4 h-4" /> {exam.totalMarks} Points</span>
-                            <span className="flex items-center gap-2.5 text-slate-900"><ShieldCheck className="w-4 h-4" /> Proctoring Active</span>
-                         </CardDescription>
-                      </CardHeader>
-                      <CardContent className="p-12 bg-slate-50/30">
-                         <div className="grid md:grid-cols-2 gap-8">
-                            {[
-                               { t: "FullScreen Focus", d: "Window must remain in dedicated FullScreen mode at all times.", i: <Maximize2 className="size-5 text-indigo-500" /> },
-                               { t: "Hardware Lockdown", d: "Secondary displays and recording devices are strictly prohibited.", i: <MonitorX className="size-5 text-rose-500" /> },
-                               { t: "Institutional Sync", d: "Automated pulse synchronization occurs every 30 seconds.", i: <RotateCcw className="size-5 text-emerald-500" /> },
-                               { t: "Final Integrity", d: "Once submitted, the academic payload cannot be modified.", i: <Zap className="size-5 text-amber-500" /> }
-                            ].map((rule, i) => (
-                               <div key={i} className="flex gap-5 group">
-                                  <div className="size-12 rounded-2xl bg-white border border-muted/10 shadow-sm flex items-center justify-center shrink-0 group-hover:scale-110 group-hover:bg-indigo-50 transition-all duration-300">
-                                     {rule.i}
-                                  </div>
-                                  <div>
-                                     <h4 className="font-black text-slate-900 text-sm uppercase tracking-tight">{rule.t}</h4>
-                                     <p className="text-xs font-bold text-slate-400 mt-1 leading-relaxed">{rule.d}</p>
-                                  </div>
-                               </div>
-                            ))}
-                         </div>
-                      </CardContent>
-                   </Card>
+             <div className="grid gap-6 lg:grid-cols-5">
+                <div className="rounded-2xl border bg-card p-6 shadow-xs lg:col-span-3 sm:p-8">
+                   <h2 className="text-lg font-semibold text-foreground">Before you begin</h2>
+                   <p className="mt-1 text-sm text-muted-foreground">This exam is proctored. Please read these rules carefully.</p>
+                   <ul className="mt-6 space-y-5">
+                      {[
+                         { t: "Stay in fullscreen", d: "Leaving fullscreen or switching tabs is recorded. 4 violations end the exam.", i: Maximize2 },
+                         { t: "Use a single screen", d: "Disconnect external monitors before you start.", i: MonitorX },
+                         { t: "Keep your camera on", d: `Stay in view and look at the screen. ${FACE_STRIKE_LIMIT} camera warnings end the exam. Video never leaves your device.`, i: ScanFace },
+                         { t: "Answers save automatically", d: "Every 30 seconds and when you submit. If you get disconnected, just reopen the exam.", i: RotateCcw },
+                         { t: "Submitting is final", d: "You can't change answers once submitted. The exam also submits when time runs out.", i: CheckCircle2 },
+                      ].map(({ t, d, i: Icon }) => (
+                         <li key={t} className="flex gap-4">
+                            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Icon className="size-4" /></span>
+                            <div>
+                               <p className="text-sm font-medium text-foreground">{t}</p>
+                               <p className="mt-0.5 text-sm text-muted-foreground">{d}</p>
+                            </div>
+                         </li>
+                      ))}
+                   </ul>
                 </div>
-                <div className="space-y-6">
-                   <Card className="rounded-[40px] border-none shadow-2xl bg-slate-900 text-white p-10 flex flex-col items-center justify-center text-center">
-                      <div className="size-20 bg-white/5 rounded-[32px] flex items-center justify-center mb-8 shadow-inner shadow-black/20">
-                         <FileText className="size-10 text-indigo-400" />
-                      </div>
-                      <h3 className="text-2xl font-black italic tracking-tighter">PROTOCOL ACCEPECTANCE</h3>
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40 mt-3 leading-relaxed">By proceeding, you agree to institutional proctoring standards.</p>
-                      <Button 
-                         onClick={() => setCurrentStep(2)}
-                         className="w-full h-16 mt-10 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 font-black uppercase tracking-[0.15em] text-[11px] shadow-2xl transition-all active:scale-95 flex gap-3 border-b-4 border-indigo-900"
-                      >
-                         PROCEED TO SCAN <ChevronRight className="w-4 h-4" />
-                      </Button>
-                   </Card>
+                <div className="flex flex-col justify-between rounded-2xl border bg-card p-6 shadow-xs lg:col-span-2 sm:p-8">
+                   <div>
+                      <span className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Info className="size-5" /></span>
+                      <h3 className="mt-4 font-semibold text-foreground">Ready?</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                         Next we&apos;ll check your display and camera. The timer only starts when you begin the exam.
+                      </p>
+                   </div>
+                   <Button onClick={() => setCurrentStep(2)} className="mt-6 w-full">
+                      I understand, continue <ChevronRight className="size-4" />
+                   </Button>
                 </div>
              </div>
           )}
 
           {currentStep === 2 && (
-             <div className="max-w-2xl mx-auto">
-                <Card className="border-none shadow-2xl rounded-[48px] bg-white overflow-hidden p-16 text-center space-y-12">
-                   <div className="flex flex-col items-center">
-                      <div className={`size-32 rounded-[40px] flex items-center justify-center mb-10 shadow-2xl transition-all duration-700 ${screenSecurity.verified ? 'bg-emerald-50 text-emerald-600 scale-110' : 'bg-rose-50 text-rose-600 animate-pulse'}`}>
-                         {screenSecurity.verified ? <MonitorCheck className="size-16" /> : <MonitorX className="size-16" />}
-                      </div>
-                      <Badge className={`font-black uppercase tracking-widest px-6 py-2 rounded-full border-none mb-4 ${screenSecurity.verified ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                         Phase 02: Hardware Integrity
-                      </Badge>
-                      <h2 className="text-3xl font-black text-slate-900 tracking-tight italic">
-                         {screenSecurity.verified ? "HARDWARE VERIFIED" : "HARDWARE BREACH DETECTED"}
-                      </h2>
-                      <p className="text-sm font-bold text-slate-400 mt-4 max-w-sm mx-auto leading-relaxed uppercase tracking-tighter italic">
-                         {screenSecurity.verified 
-                           ? "System registry confirms a single-display environment. You are cleared for the secure environment engagement." 
-                           : screenSecurity.error || "Please disconnect all secondary monitors and extended displays to proceed."}
-                      </p>
-                   </div>
-
-                   <div className="grid gap-4">
-                      <Button 
-                        onClick={() => setCurrentStep(3)}
-                        disabled={!screenSecurity.verified}
-                        className={`w-full h-20 rounded-3xl font-black uppercase tracking-[0.2em] text-[12px] shadow-2xl flex gap-4 transition-all ${
-                           screenSecurity.verified 
-                           ? "bg-indigo-600 text-white hover:bg-indigo-700 border-b-8 border-indigo-900 active:translate-y-1" 
-                           : "bg-slate-100 text-slate-300 cursor-not-allowed grayscale"
-                        }`}
-                      >
-                         SECURE ENVIRONMENT ENGAGEMENT <Lock className="size-5" />
-                      </Button>
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 opacity-60 italic pt-4">Polling Registry for hardware changes...</p>
-                   </div>
-                </Card>
-             </div>
+             <StepCard
+               icon={screenSecurity.verified ? MonitorCheck : MonitorX}
+               tone={screenSecurity.verified ? "success" : "danger"}
+               title={screenSecurity.verified ? "Single display confirmed" : "Extra display detected"}
+               footer={
+                  <>
+                     <Button onClick={() => setCurrentStep(3)} disabled={!screenSecurity.verified} className="w-full">
+                        Continue to camera check <ChevronRight className="size-4" />
+                     </Button>
+                     <p className="text-xs text-muted-foreground">Checking your displays every few seconds…</p>
+                  </>
+               }
+             >
+                {screenSecurity.verified
+                  ? "Only one screen is connected. You're good to go."
+                  : screenSecurity.error || "Disconnect any secondary monitors or turn off extended desktop, then wait a moment."}
+             </StepCard>
           )}
 
           {currentStep === 3 && (
-             <div className="max-w-2xl mx-auto">
-                <Card className="border-none shadow-2xl rounded-[48px] bg-indigo-900 overflow-hidden p-16 text-center space-y-12 text-white relative">
-                   <div className="absolute top-0 right-0 p-8 opacity-10">
-                      <Zap className="size-64" />
-                   </div>
-                   <div className="flex flex-col items-center relative z-10">
-                      <div className={`size-32 rounded-[40px] flex items-center justify-center mb-10 shadow-2xl transition-all duration-700 border-4 ${isFullscreen ? 'bg-white text-indigo-900 border-indigo-400 scale-110' : 'bg-indigo-800 text-indigo-400 border-indigo-700 animate-bounce'}`}>
-                         <ShieldCheck className="size-16" />
-                      </div>
-                      <Badge className="bg-white/10 text-white font-black uppercase tracking-widest px-6 py-2 rounded-full border-none mb-4 italic">
-                         Phase 03: Final Security Handshake
-                      </Badge>
-                      <h2 className="text-3xl font-black tracking-tight italic">
-                         {isFullscreen ? "SECURITY PROTOCOL ACTIVE" : "LOCKDOWN REQUIRED"}
-                      </h2>
-                      <p className="text-sm font-bold opacity-60 mt-4 max-w-sm mx-auto leading-relaxed uppercase tracking-tighter italic">
-                         {isFullscreen 
-                           ? "Assessment engine is pressurized and ready for launch. Do not attempt to minimize or switch tabs once started." 
-                           : "The global assessment cluster requires a locked browser context. Please engage FullScreen mode to manifest the launch gate."}
-                      </p>
-                   </div>
+             <StepCard
+               icon={ScanFace}
+               tone={cameraVerified ? "success" : camera.status === "error" ? "danger" : "primary"}
+               title={cameraVerified ? "Camera verified" : camera.status === "error" ? "Camera required" : "Position your face"}
+               footer={
+                  <>
+                     <div className="mx-auto w-full max-w-sm">
+                        <CameraPreview
+                          videoRef={camera.videoRef}
+                          status={camera.status}
+                          reason={camera.reason}
+                          lighting={camera.lighting}
+                          calibrated={camera.calibrated}
+                          metrics={camera.metrics}
+                          debug={proctorDebug}
+                        />
+                     </div>
+                     {camera.status === "error" ? (
+                        <Button onClick={camera.retry} variant="outline" className="w-full">
+                           <RotateCcw className="size-4" /> Try camera again
+                        </Button>
+                     ) : (
+                        <Button onClick={() => setCurrentStep(4)} disabled={!cameraVerified} className="w-full">
+                           Continue <ChevronRight className="size-4" />
+                        </Button>
+                     )}
+                     <p className="text-xs text-muted-foreground">
+                        {cameraVerified
+                          ? "Camera ready."
+                          : camera.status === "ok" && !camera.calibrated
+                            ? "Calibrating — look at the centre of your screen…"
+                            : camera.status === "multiple"
+                              ? "Only you may be in view."
+                              : camera.status === "looking_away"
+                                ? "Look straight at your screen."
+                                : "Hold still, facing the camera…"}
+                     </p>
+                  </>
+               }
+             >
+                {camera.error
+                  ? camera.error
+                  : "Sit in good light, alone, facing the screen. The camera stays on during the exam and is analysed only on this device — nothing is recorded or uploaded."}
+             </StepCard>
+          )}
 
-                   <div className="space-y-6 relative z-10">
-                      {!isFullscreen ? (
-                         <Button 
-                           onClick={handleFullscreenRequest}
-                           className="w-full h-20 rounded-3xl bg-white text-indigo-900 hover:bg-slate-50 font-black uppercase tracking-[0.2em] text-[12px] shadow-2xl border-b-8 border-slate-300 active:translate-y-1 transition-all flex gap-4"
-                         >
-                            ENGAGE FULLSCREEN MODE <Maximize2 className="size-5" />
-                         </Button>
-                      ) : (
-                         <Button 
-                           onClick={handleLaunch}
-                           disabled={starting}
-                           className="w-full h-20 rounded-3xl bg-emerald-500 text-white hover:bg-emerald-600 font-black uppercase tracking-[0.2em] text-[12px] shadow-2xl border-b-8 border-emerald-800 animate-in zoom-in active:translate-y-1 transition-all flex gap-4"
-                         >
-                            {starting ? "INITIALIZING PAYLOAD..." : "LAUNCH ASSESSMENT ENGINE"} <Play className="size-5 fill-white" />
-                         </Button>
-                      )}
-                      
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40 italic">
-                         Secure Handshake synchronized with Regional Cluster
-                      </p>
-                   </div>
-                </Card>
-             </div>
+          {currentStep === 4 && (
+             <StepCard
+               icon={isFullscreen ? ShieldCheck : Maximize2}
+               tone={isFullscreen ? "success" : "primary"}
+               title={isFullscreen ? "All set" : "Enter fullscreen"}
+               footer={
+                  !isFullscreen ? (
+                     <Button onClick={handleFullscreenRequest} className="w-full">
+                        <Maximize2 className="size-4" /> Enter fullscreen
+                     </Button>
+                  ) : (
+                     <Button onClick={handleLaunch} disabled={starting} variant="success" className="w-full">
+                        <Play className="size-4 fill-current" /> {starting ? "Starting…" : `Start exam · ${exam.duration} min`}
+                     </Button>
+                  )
+               }
+             >
+                {isFullscreen
+                  ? "The timer starts as soon as you begin. Don't leave fullscreen or switch tabs until you submit."
+                  : "The exam runs in fullscreen. Click below, then start when you're ready."}
+             </StepCard>
           )}
        </div>
     </div>

@@ -1,27 +1,19 @@
 import { syncAnswers } from "@/lib/services/attempt.service";
-import { cookies } from "next/headers";
-
-async function getAuthContext() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("testify-token")?.value;
-  if (!token) return null;
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-    return payload;
-  } catch (e) { return null; }
-}
+import { requireAuth, errorResponse } from "@/lib/server-auth.js";
 
 export async function PATCH(req, { params }) {
   try {
-    const auth = await getAuthContext();
-    if (!auth) return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    const auth = await requireAuth(req, { roles: ["STUDENT"] });
 
     const { id } = await params;
     const { answers } = await req.json();
-    
+    if (!Array.isArray(answers)) {
+      return Response.json({ success: false, message: "answers must be an array" }, { status: 400 });
+    }
+
     const result = await syncAnswers(auth.userId, id, answers);
     return Response.json(result);
   } catch (error) {
-    return Response.json({ success: false, message: error.message }, { status: 400 });
+    return errorResponse(error);
   }
 }

@@ -29,8 +29,8 @@ export default function Navbar() {
               <Button variant="outline">Login</Button>
             </Link>
 
-            <Link href="/register">
-              <Button>Register</Button>
+            <Link href="/get-started">
+              <Button>Get Started</Button>
             </Link>
           </>
         ) : (

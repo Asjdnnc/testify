@@ -2,134 +2,159 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChevronLeft, User, Mail, Calendar, CheckCircle, Clock, RotateCw, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { ChevronLeft, RefreshCw, Users, BarChart3, Clock, CheckCircle2, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Panel, StatCard, StatusBadge, EmptyState, LoadingState, SegmentedTabs, SearchInput,
+} from "@/components/ui/saas";
+
+function statusFor(r) {
+  if (r.attempt?.status === "CHEATED") return { label: "Terminated", tone: "danger" };
+  if (r.gradingStatus === "MANUAL_REVIEW_PENDING") return { label: "Needs grading", tone: "warning" };
+  if (r.gradingStatus === "PUBLISHED") return { label: "Published", tone: "primary" };
+  return { label: "Graded", tone: "success" };
+}
 
 export default function ExamAttemptsList() {
   const { id } = useParams();
   const [attempts, setAttempts] = useState([]);
+  const [exam, setExam] = useState(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [tab, setTab] = useState("all");
+  const [search, setSearch] = useState("");
 
   async function loadData() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/grading/pending?examId=${id}`);
-      const data = await res.json();
-      if (data.success) setAttempts(data.attempts);
-    } catch (e) { toast.error("Failed to load attempts"); }
+      const [res, exRes] = await Promise.all([
+        fetch(`/api/grading/pending?examId=${id}`).then((r) => r.json()),
+        fetch(`/api/org/exams/${id}`).then((r) => r.json()),
+      ]);
+      if (res.success) setAttempts(res.attempts);
+      if (exRes.success) setExam(exRes.exam);
+    } catch {
+      toast.error("Couldn't load submissions");
+    }
     setLoading(false);
   }
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   async function handleSync() {
     setSyncing(true);
     try {
-      const res = await fetch(`/api/org/exams/${id}/sync`, { method: 'POST' });
+      const res = await fetch(`/api/org/exams/${id}/sync`, { method: "POST" });
       const data = await res.json();
       if (data.success) {
-        toast.success(`Recovered ${data.count} student results!`);
+        toast.success(`Recalculated ${data.count} result${data.count !== 1 ? "s" : ""}`);
         loadData();
-      } else {
-        toast.error("Sync failed: " + data.message);
-      }
-    } catch (e) { toast.error("Sync error occurred"); }
+      } else toast.error(data.message || "Recalculation failed");
+    } catch {
+      toast.error("Recalculation failed");
+    }
     setSyncing(false);
   }
 
-  if (loading) return <div className="p-12 text-center text-muted-foreground">Loading attempts...</div>;
+  if (loading) return <LoadingState label="Loading submissions…" />;
+
+  const pending = attempts.filter((a) => a.gradingStatus === "MANUAL_REVIEW_PENDING").length;
+  const graded = attempts.filter((a) => a.gradingStatus !== "MANUAL_REVIEW_PENDING");
+  const avg = graded.length ? Math.round(graded.reduce((s, a) => s + (a.percentage || 0), 0) / graded.length) : null;
+  const passRate = graded.length ? Math.round((graded.filter((a) => a.isPassed).length / graded.length) * 100) : null;
+
+  const shown = attempts
+    .filter((a) => tab === "all" || (tab === "pending" ? a.gradingStatus === "MANUAL_REVIEW_PENDING" : a.gradingStatus !== "MANUAL_REVIEW_PENDING"))
+    .filter((a) => `${a.student?.name} ${a.student?.email}`.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
-        <Link href="/dashboard/teacher/grading" className="hover:text-primary flex items-center">
-          <ChevronLeft className="w-4 h-4 mr-1" /> Back to Dashboard
-        </Link>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <Link href="/dashboard/teacher/grading" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+            <ChevronLeft className="size-4" /> Grading
+          </Link>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{exam?.title || "Submissions"}</h1>
+          {exam && <p className="mt-1 text-sm text-muted-foreground">{exam.subject?.name} · out of {exam.totalMarks} marks{exam.passingMarks ? ` · pass mark ${exam.passingMarks}` : ""}</p>}
+        </div>
+        <Button variant="outline" onClick={handleSync} disabled={syncing} title="Re-run auto-grading for every submission (keeps your manual marks)">
+          <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} /> Recalculate results
+        </Button>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle>Total Submissions: {attempts.length}</CardTitle>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleSync} 
-            disabled={syncing}
-            className="rounded-xl font-bold bg-indigo-50 border-indigo-100 text-indigo-700 hover:bg-indigo-100 flex gap-2"
-          >
-            {syncing ? <RotateCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            Sync & Recover Results
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Student</TableHead>
-                <TableHead>Submitted At</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Score</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {attempts.map((result) => (
-                <TableRow key={result.id}>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{result.student.name}</span>
-                      <span className="text-xs text-muted-foreground">{result.student.email}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {result.attempt.submittedAt ? new Date(result.attempt.submittedAt).toLocaleString() : "N/A"}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={result.gradingStatus} />
-                  </TableCell>
-                  <TableCell>
-                     <span className="font-semibold">{result.totalMarksObtained ?? "--"}</span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link href={`/dashboard/teacher/grading/attempt/${result.attemptId}`}>
-                      <Button variant="secondary" size="sm">
-                        Review & Grade
-                      </Button>
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={Users} label="Submissions" value={attempts.length} tone="primary" />
+        <StatCard icon={Clock} label="Needs grading" value={pending} tone="warning" />
+        <StatCard icon={BarChart3} label="Average score" value={avg != null ? `${avg}%` : "—"} hint="Graded submissions" tone="info" />
+        <StatCard icon={CheckCircle2} label="Pass rate" value={passRate != null ? `${passRate}%` : "—"} hint="Graded submissions" tone="success" />
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <SegmentedTabs
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "all", label: "All", count: attempts.length },
+            { value: "pending", label: "Needs grading", count: pending },
+            { value: "graded", label: "Graded", count: graded.length },
+          ]}
+        />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search students…" className="sm:w-64" />
+      </div>
+
+      <Panel noPadding>
+        {shown.length === 0 ? (
+          <EmptyState icon={Users} title="No submissions here" description="Try a different tab or search." className="m-5" />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-5 py-3 font-medium">Student</th>
+                  <th className="hidden px-5 py-3 font-medium md:table-cell">Submitted</th>
+                  <th className="px-5 py-3 font-medium">Status</th>
+                  <th className="px-5 py-3 text-right font-medium">Score</th>
+                  <th className="px-5 py-3"><span className="sr-only">Action</span></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {shown.map((r) => {
+                  const st = statusFor(r);
+                  return (
+                    <tr key={r.id} className="hover:bg-muted/30">
+                      <td className="px-5 py-3">
+                        <p className="font-medium text-foreground">{r.student?.name}</p>
+                        <p className="text-xs text-muted-foreground">{r.student?.email}</p>
+                      </td>
+                      <td className="hidden px-5 py-3 text-muted-foreground md:table-cell">
+                        {r.attempt?.submittedAt ? new Date(r.attempt.submittedAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                      </td>
+                      <td className="px-5 py-3"><StatusBadge tone={st.tone} dot>{st.label}</StatusBadge></td>
+                      <td className="px-5 py-3 text-right tabular-nums">
+                        <span className="font-medium text-foreground">{r.totalMarksObtained}</span>
+                        <span className="text-muted-foreground"> / {exam?.totalMarks ?? "—"}</span>
+                        {r.percentage != null && <span className="ml-2 text-xs text-muted-foreground">({Math.round(r.percentage)}%)</span>}
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <Button asChild size="sm" variant={r.gradingStatus === "MANUAL_REVIEW_PENDING" ? "default" : "outline"}>
+                          <Link href={`/dashboard/teacher/grading/attempt/${r.attempt.id}`}>
+                            {r.gradingStatus === "MANUAL_REVIEW_PENDING" ? "Grade" : "Review"} <ArrowRight className="size-3.5" />
+                          </Link>
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
     </div>
-  );
-}
-
-function StatusBadge({ status }) {
-  const styles = {
-    MANUAL_REVIEW_PENDING: "bg-amber-100 text-amber-700 border-amber-200",
-    AUTO_GRADED: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    FULLY_GRADED: "bg-blue-100 text-blue-700 border-blue-200"
-  };
-
-  const labels = {
-    MANUAL_REVIEW_PENDING: "Pending Review",
-    AUTO_GRADED: "Auto Graded",
-    FULLY_GRADED: "Results Published"
-  };
-
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${styles[status]}`}>
-      {labels[status] || status}
-    </span>
   );
 }

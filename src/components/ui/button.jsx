@@ -19,6 +19,10 @@ const buttonVariants = cva(
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // Uses Tailwind's built-in emerald palette (always compiled) so primary
+        // actions like "Start exam" / "Submit exam" can never lose their colour.
+        success:
+          "bg-emerald-600 text-white shadow-xs hover:bg-emerald-700 focus-visible:ring-emerald-600/30 dark:bg-emerald-600 dark:hover:bg-emerald-500",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",

@@ -1,117 +1,81 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "@/context/auth-context";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  CreditCard,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  Clock,
-  Zap,
-  Building2,
-  Users,
-  GraduationCap,
-  BookOpen,
-  ClipboardList,
-  ArrowUpRight,
-  RefreshCw,
-  Loader2,
-  AlertCircle,
+  CreditCard, CheckCircle2, AlertTriangle, XCircle, Users, GraduationCap, ClipboardList,
+  Loader2, Check, Minus, Sparkles, Receipt, CalendarClock, ShieldAlert,
 } from "lucide-react";
+import {
+  PageHeader, Panel, StatusBadge, EmptyState, LoadingState, Modal, Field, selectClass, SUBSCRIPTION_TONE,
+} from "@/components/ui/saas";
 
-// ── Status Badge ─────────────────────────────────────────────────────────────
-const STATUS_CONFIG = {
-  TRIAL: { label: "Free Trial", icon: Clock, className: "bg-amber-500/15 text-amber-400 border border-amber-500/30" },
-  TRIAL_EXPIRED: { label: "Trial Expired", icon: AlertTriangle, className: "bg-red-500/15 text-red-400 border border-red-500/30" },
-  ACTIVE: { label: "Active", icon: CheckCircle2, className: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" },
-  SUSPENDED: { label: "Suspended", icon: AlertTriangle, className: "bg-orange-500/15 text-orange-400 border border-orange-500/30" },
-  CANCELLED: { label: "Cancelled", icon: XCircle, className: "bg-red-500/15 text-red-400 border border-red-500/30" },
+const STATUS_LABEL = {
+  TRIAL: "Free trial", TRIAL_EXPIRED: "Trial expired", ACTIVE: "Active", SUSPENDED: "Suspended", CANCELLED: "Cancelled",
+};
+const PAYMENT_TONE = { SUCCESS: "success", FAILED: "danger", REFUNDED: "info", PENDING: "neutral" };
+const PLAN_ORDER = { TRIAL: 0, STARTER: 1, PROFESSIONAL: 2, ENTERPRISE: 3 };
+const PLAN_TAGLINE = {
+  STARTER: "For a single department getting started.",
+  PROFESSIONAL: "For colleges running exams at scale.",
+  ENTERPRISE: "For universities with custom needs.",
 };
 
-const PLAN_COLORS = {
-  TRIAL: "from-slate-600 to-slate-700",
-  STARTER: "from-blue-600 to-indigo-700",
-  PROFESSIONAL: "from-violet-600 to-purple-700",
-  ENTERPRISE: "from-amber-600 to-orange-700",
-};
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—");
+const rupees = (paise) => `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
+const daysLeft = (d) => (d ? Math.max(0, Math.ceil((new Date(d) - new Date()) / 864e5)) : null);
+const limit = (n) => (n == null ? "Unlimited" : n.toLocaleString("en-IN"));
 
-// Hardcoded fallback or empty initial state
-const FALLBACK_PLANS = [
-  {
-    type: "STARTER",
-    name: "Starter",
-    price: "₹999",
-    period: "/month",
-    features: ["5 Branches", "10 Batches", "10 Teachers", "200 Students", "50 Exams", "Analytics & Bulk Import"],
-  },
-  {
-    type: "PROFESSIONAL",
-    name: "Professional",
-    price: "₹2,999",
-    period: "/month",
-    features: ["Unlimited Branches", "Unlimited Batches", "Unlimited Teachers", "Unlimited Students", "Unlimited Exams", "Proctoring + Analytics"],
-    recommended: true,
-  },
-  {
-    type: "ENTERPRISE",
-    name: "Enterprise",
-    price: "₹9,999",
-    period: "/month",
-    features: ["Everything in Professional", "API Access", "Priority Support", "Custom Integrations", "SLA Guarantee"],
-  },
-];
-
-// ── Resource Usage Bar ────────────────────────────────────────────────────────
-function UsageBar({ label, current, max, icon: Icon }) {
-  const percent = max === null ? 0 : Math.min((current / max) * 100, 100);
-  const isUnlimited = max === null;
-  const isNearLimit = !isUnlimited && percent >= 80;
-  const isAtLimit = !isUnlimited && percent >= 100;
-
+function UsageMeter({ icon: Icon, label, current, max }) {
+  const unlimited = max == null;
+  const pct = unlimited ? 0 : Math.min(100, Math.round((current / Math.max(max, 1)) * 100));
+  const tone = unlimited ? "bg-success" : pct >= 100 ? "bg-destructive" : pct >= 80 ? "bg-warning" : "bg-primary";
   return (
-    <div className="space-y-1.5">
+    <div>
       <div className="flex items-center justify-between text-sm">
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          <Icon className="w-3.5 h-3.5" />
-          <span>{label}</span>
-        </div>
-        <span className={`text-xs font-medium ${isAtLimit ? "text-destructive" : isNearLimit ? "text-amber-500" : "text-muted-foreground"}`}>
-          {isUnlimited ? `${current} / ∞` : `${current} / ${max}`}
+        <span className="flex items-center gap-2 text-muted-foreground"><Icon className="size-4" /> {label}</span>
+        <span className="font-medium tabular-nums text-foreground">
+          {current}<span className="text-muted-foreground"> / {unlimited ? "∞" : max}</span>
         </span>
       </div>
-      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-        {isUnlimited ? (
-          <div className="h-full w-full rounded-full bg-emerald-500/30" />
-        ) : (
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${isAtLimit ? "bg-destructive" : isNearLimit ? "bg-amber-500" : "bg-primary"}`}
-            style={{ width: `${percent}%` }}
-          />
-        )}
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+        <div className={`h-full rounded-full transition-all duration-500 ${tone}`} style={{ width: unlimited ? "100%" : `${pct}%`, opacity: unlimited ? 0.35 : 1 }} />
       </div>
+      {!unlimited && pct >= 80 && (
+        <p className={`mt-1.5 text-xs ${pct >= 100 ? "text-destructive" : "text-warning-foreground"}`}>
+          {pct >= 100 ? "Limit reached — upgrade to add more." : "Approaching your plan limit."}
+        </p>
+      )}
     </div>
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+function planRows(plan) {
+  const f = plan.features || {};
+  return [
+    { label: "Teachers", value: limit(plan.maxTeachers) },
+    { label: "Students", value: limit(plan.maxStudents) },
+    { label: "Exams", value: limit(plan.maxExams) },
+    { label: "Branches & batches", value: plan.maxBranches == null ? "Unlimited" : `${plan.maxBranches} / ${limit(plan.maxBatches)}` },
+    { label: "Bulk spreadsheet import", on: !!f.bulkImport },
+    { label: "Analytics", on: !!f.analytics },
+    { label: "Camera & browser proctoring", on: !!f.proctoring },
+    { label: "API access", on: !!f.apiAccess },
+  ];
+}
+
 export default function BillingPage() {
-  const { user } = useAuth();
   const [billing, setBilling] = useState(null);
   const [payments, setPayments] = useState([]);
-  const [availablePlans, setAvailablePlans] = useState([]);
+  const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [upgrading, setUpgrading] = useState(null); // planType being upgraded to
+  const [upgrading, setUpgrading] = useState(null);
   const [cancelling, setCancelling] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    loadBillingData();
-  }, []);
+  useEffect(() => { loadBillingData(); }, []);
 
   async function loadBillingData() {
     setLoading(true);
@@ -124,9 +88,9 @@ export default function BillingPage() {
       ]);
       if (billingRes.success) setBilling(billingRes.billing);
       if (paymentsRes.success) setPayments(paymentsRes.payments);
-      if (plansRes.success) setAvailablePlans(plansRes.plans);
-    } catch (err) {
-      setError("Failed to load billing data.");
+      if (plansRes.success) setPlans(plansRes.plans);
+    } catch {
+      setError("We couldn't load your billing details. Please refresh the page.");
     } finally {
       setLoading(false);
     }
@@ -144,44 +108,36 @@ export default function BillingPage() {
       const data = await res.json();
       if (!data.success) throw new Error(data.message);
 
-      // Launch Razorpay checkout
       const options = {
         key: data.key,
         amount: data.amount,
         currency: data.currency,
         order_id: data.gatewayOrderId,
-        name: "Testify Exam Platform",
-        description: `${planType} Plan Subscription`,
+        name: "Testify",
+        description: `${planType.charAt(0) + planType.slice(1).toLowerCase()} plan · 30 days`,
         handler: async function (response) {
-          // Submit payment verification to our backend
           const verifyRes = await fetch("/api/payments/webhook/razorpay", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(response),
           });
           const verifyData = await verifyRes.json();
-          if (verifyData.success) {
-            await loadBillingData();
-          }
+          if (verifyData.success) await loadBillingData();
+          else setError(verifyData.message || "Payment verification failed. If you were charged, contact support.");
         },
         theme: { color: "#4f6ef7" },
       };
 
-      if (typeof window !== "undefined" && window.Razorpay) {
-        const rzp = new window.Razorpay(options);
-        rzp.open();
-      } else {
-        // Fallback: load Razorpay script
+      const open = () => new window.Razorpay(options).open();
+      if (window.Razorpay) open();
+      else {
         const script = document.createElement("script");
         script.src = "https://checkout.razorpay.com/v1/checkout.js";
-        script.onload = () => {
-          const rzp = new window.Razorpay(options);
-          rzp.open();
-        };
+        script.onload = open;
         document.head.appendChild(script);
       }
     } catch (err) {
-      setError(err.message || "Payment initiation failed.");
+      setError(err.message || "Couldn't start the payment.");
     } finally {
       setUpgrading(null);
     }
@@ -207,187 +163,177 @@ export default function BillingPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin text-indigo-400 mx-auto" />
-          <p className="text-slate-400 text-sm">Loading billing information…</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <LoadingState label="Loading billing…" />;
 
   const status = billing?.subscriptionStatus || "TRIAL";
-  const statusConfig = STATUS_CONFIG[status] || STATUS_CONFIG.TRIAL;
-  const StatusIcon = statusConfig.icon;
+  const currentType = billing?.planType || "TRIAL";
   const usage = billing?.usage;
-  const isLocked = status === "TRIAL_EXPIRED" || status === "SUSPENDED" || status === "CANCELLED";
+  const isLocked = ["TRIAL_EXPIRED", "SUSPENDED", "CANCELLED"].includes(status);
+  const currentPlan = plans.find((p) => p.planType === currentType);
+  const trialDays = status === "TRIAL" ? daysLeft(billing?.trialEndsAt) : null;
+  const periodDays = status === "ACTIVE" ? daysLeft(billing?.currentPeriodEnd) : null;
+  const scheduled = billing?.cancellationScheduledAt;
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
-      {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Billing & Subscription</h1>
-        <p className="text-muted-foreground mt-1 text-sm">Manage your plan, payments, and account lifecycle.</p>
-      </div>
+    <div className="space-y-8">
+      <PageHeader title="Billing & plan" description="Your subscription, usage limits and payment history." />
 
-      {/* Error banner */}
       {error && (
-        <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 rounded-xl p-4">
-          <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
-          <p className="text-red-300 text-sm">{error}</p>
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {error}
         </div>
       )}
 
-      {/* Access locked banner */}
       {isLocked && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-5">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning/10 p-4">
+          <ShieldAlert className="mt-0.5 size-5 shrink-0 text-warning-foreground" />
+          <div>
+            <p className="font-medium text-foreground">Your account is read-only</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {status === "TRIAL_EXPIRED" ? "Your free trial has ended." : status === "SUSPENDED" ? "Your subscription has lapsed." : "Your account has been cancelled."}
+              {" "}You can still view everything, but new exams, users and changes are blocked
+              {status !== "CANCELLED" ? " until you choose a plan below." : "."}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Summary */}
+      <div className="grid gap-6 lg:grid-cols-5">
+        <Panel className="lg:col-span-3" bodyClassName="flex h-full flex-col">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h3 className="text-amber-300 font-semibold">Platform access restricted</h3>
-              <p className="text-amber-400/70 text-sm mt-1">
-                {status === "TRIAL_EXPIRED"
-                  ? "Your free trial has ended. Choose a plan below to restore access."
-                  : status === "SUSPENDED"
-                  ? "Your subscription has lapsed. Renew to restore full access."
-                  : "Your account has been cancelled. Contact support to restore."}
+              <p className="text-sm font-medium text-muted-foreground">Current plan</p>
+              <div className="mt-1 flex items-center gap-3">
+                <h2 className="text-3xl font-semibold tracking-tight text-foreground">{billing?.plan || "Trial"}</h2>
+                <StatusBadge tone={SUBSCRIPTION_TONE[status]} dot>{STATUS_LABEL[status]}</StatusBadge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {currentPlan && currentPlan.priceInPaise > 0 ? `${rupees(currentPlan.priceInPaise)} per month` : "Free while you evaluate Testify"}
               </p>
             </div>
+            <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary"><Sparkles className="size-5" /></span>
           </div>
-        </div>
-      )}
 
-      {/* Current plan card */}
-      <div className={`rounded-2xl bg-gradient-to-br ${PLAN_COLORS[billing?.planType || "TRIAL"]} p-0.5`}>
-        <div className="rounded-[14px] bg-slate-900 p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Zap className="w-5 h-5 text-indigo-400" />
-                <span className="text-slate-400 text-sm font-medium uppercase tracking-wider">Current Plan</span>
+          <div className="mt-6 grid gap-4 border-t pt-5 sm:grid-cols-2">
+            {status === "TRIAL" && (
+              <div>
+                <p className="text-xs text-muted-foreground">Trial ends</p>
+                <p className="mt-0.5 font-medium text-foreground">{fmtDate(billing?.trialEndsAt)}</p>
+                {trialDays != null && (
+                  <>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-warning" style={{ width: `${Math.min(100, (trialDays / 3) * 100)}%` }} />
+                    </div>
+                    <p className="mt-1 text-xs text-warning-foreground">{trialDays} day{trialDays !== 1 ? "s" : ""} left</p>
+                  </>
+                )}
               </div>
-              <h2 className="text-3xl font-bold text-slate-100">
-                {billing?.plan || "Trial"}
-              </h2>
-              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusConfig.className}`}>
-                <StatusIcon className="w-3 h-3" />
-                {statusConfig.label}
+            )}
+            {status === "ACTIVE" && (
+              <div>
+                <p className="text-xs text-muted-foreground">Renews</p>
+                <p className="mt-0.5 font-medium text-foreground">{fmtDate(billing?.currentPeriodEnd)}</p>
+                {periodDays != null && <p className="mt-1 text-xs text-muted-foreground">in {periodDays} day{periodDays !== 1 ? "s" : ""} · renew manually from this page</p>}
               </div>
-            </div>
-            <div className="text-right">
-              {status === "TRIAL" && billing?.trialEndsAt && (
-                <div className="space-y-1">
-                  <p className="text-slate-400 text-xs">Trial ends</p>
-                  <p className="text-slate-200 font-semibold">
-                    {new Date(billing.trialEndsAt).toLocaleDateString("en-IN", {
-                      day: "numeric", month: "short", year: "numeric",
-                    })}
-                  </p>
-                </div>
-              )}
-              {status === "ACTIVE" && billing?.currentPeriodEnd && (
-                <div className="space-y-1">
-                  <p className="text-slate-400 text-xs">Next renewal</p>
-                  <p className="text-slate-200 font-semibold">
-                    {new Date(billing.currentPeriodEnd).toLocaleDateString("en-IN", {
-                      day: "numeric", month: "short", year: "numeric",
-                    })}
-                  </p>
-                </div>
-              )}
+            )}
+            {isLocked && (
+              <div>
+                <p className="text-xs text-muted-foreground">Access</p>
+                <p className="mt-0.5 font-medium text-destructive">Read-only</p>
+              </div>
+            )}
+            <div>
+              <p className="text-xs text-muted-foreground">Payment method</p>
+              <p className="mt-0.5 font-medium text-foreground">Card, UPI or net banking</p>
+              <p className="mt-1 text-xs text-muted-foreground">Processed securely by Razorpay</p>
             </div>
           </div>
-        </div>
+
+          {scheduled && (
+            <p className="mt-5 flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <CalendarClock className="size-4 shrink-0" /> Cancellation scheduled — data will be deleted after {fmtDate(scheduled)}.
+            </p>
+          )}
+
+          <div className="mt-auto flex flex-wrap gap-2 pt-6">
+            {status !== "CANCELLED" && (
+              <Button onClick={() => document.getElementById("plans")?.scrollIntoView({ behavior: "smooth" })}>
+                {currentType === "TRIAL" || isLocked ? "Choose a plan" : "Change plan"}
+              </Button>
+            )}
+            {status === "ACTIVE" && currentPlan && (
+              <Button variant="outline" onClick={() => handleUpgrade(currentType)} disabled={!!upgrading}>
+                {upgrading === currentType ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />} Renew for 30 days
+              </Button>
+            )}
+          </div>
+        </Panel>
+
+        <Panel className="lg:col-span-2" title="Usage" description="Resources used against your plan limits.">
+          {usage ? (
+            <div className="space-y-5">
+              <UsageMeter icon={Users} label="Teachers" current={usage.teachers.current} max={usage.teachers.max} />
+              <UsageMeter icon={GraduationCap} label="Students" current={usage.students.current} max={usage.students.max} />
+              <UsageMeter icon={ClipboardList} label="Exams" current={usage.exams.current} max={usage.exams.max} />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Usage data unavailable.</p>
+          )}
+        </Panel>
       </div>
 
-      {/* Resource usage */}
-      {usage && (
-        <div className="bg-card border rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
-            <ArrowUpRight className="w-4 h-4 text-primary" /> Resource Usage
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            {usage.teachers && <UsageBar label="Teachers" current={usage.teachers.current} max={usage.teachers.max} icon={Users} />}
-            {usage.students && <UsageBar label="Students" current={usage.students.current} max={usage.students.max} icon={BookOpen} />}
-            {usage.exams    && <UsageBar label="Exams"    current={usage.exams.current}    max={usage.exams.max}    icon={ClipboardList} />}
+      {/* Plans */}
+      {status !== "CANCELLED" && plans.length > 0 && (
+        <section id="plans" className="scroll-mt-24 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Plans</h2>
+            <p className="text-sm text-muted-foreground">Monthly billing in INR. Upgrade any time — new limits apply immediately.</p>
           </div>
-        </div>
-      )}
-
-      {/* Plan upgrade cards */}
-      {status !== "CANCELLED" && (
-        <section className="space-y-4">
-          <h2 className="text-base font-semibold text-foreground">
-            {status === "ACTIVE" ? "Change Plan" : "Choose a Plan"}
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {(availablePlans.length > 0 ? availablePlans : FALLBACK_PLANS).map((plan) => {
-              const planType = plan.planType || plan.type;
-              const isCurrent = billing?.planType === planType;
-              const price = plan.priceInPaise ? `₹${(plan.priceInPaise / 100).toLocaleString()}` : plan.price;
-              
-              // Extract features from JSON or use hardcoded ones
-              let features = [];
-              if (Array.isArray(plan.features)) features = plan.features;
-              else if (plan.features && typeof plan.features === 'object') {
-                  // Map Json features to strings
-                  if (plan.maxTeachers) features.push(`${plan.maxTeachers} Teachers`);
-                  else features.push("Unlimited Teachers");
-                  if (plan.maxStudents) features.push(`${plan.maxStudents} Students`);
-                  else features.push("Unlimited Students");
-                  if (plan.features.proctoring) features.push("Proctoring Enabled");
-                  if (plan.features.analytics) features.push("Advanced Analytics");
-              } else {
-                  features = plan.features || [];
-              }
-
+          <div className="grid gap-4 lg:grid-cols-3">
+            {plans.map((plan) => {
+              const type = plan.planType;
+              const isCurrent = currentType === type && status === "ACTIVE";
+              const recommended = type === "PROFESSIONAL";
+              const direction = PLAN_ORDER[type] > PLAN_ORDER[currentType] ? "Upgrade" : PLAN_ORDER[type] < PLAN_ORDER[currentType] ? "Switch" : "Renew";
               return (
                 <div
-                  key={planType}
-                  className={`relative rounded-2xl border p-5 space-y-4 transition-all ${
-                    planType === "PROFESSIONAL"
-                      ? "border-primary/50 bg-primary/5"
-                      : "border-border bg-card hover:border-border/80"
-                  }`}
+                  key={type}
+                  className={`relative flex flex-col rounded-2xl border bg-card p-6 shadow-xs ${recommended ? "border-primary ring-1 ring-primary" : ""}`}
                 >
-                  {planType === "PROFESSIONAL" && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-semibold px-3 py-1 rounded-full bg-primary text-primary-foreground">
-                      Recommended
-                    </span>
+                  {recommended && (
+                    <span className="absolute -top-3 left-6 rounded-full bg-primary px-3 py-0.5 text-xs font-medium text-primary-foreground">Most popular</span>
                   )}
-                  <div>
-                    <h3 className="text-foreground font-bold text-lg">{plan.name}</h3>
-                    <div className="flex items-baseline gap-1 mt-1">
-                      <span className="text-2xl font-extrabold text-foreground">{price}</span>
-                      <span className="text-muted-foreground text-sm">/month</span>
-                    </div>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-foreground">{plan.name}</h3>
+                    {isCurrent && <StatusBadge tone="success">Current</StatusBadge>}
                   </div>
-                  <ul className="space-y-1.5 min-h-[120px]">
-                    {features.map((f, i) => (
-                      <li key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                        {f}
+                  <p className="mt-1 text-sm text-muted-foreground">{PLAN_TAGLINE[type]}</p>
+                  <p className="mt-5 flex items-baseline gap-1">
+                    <span className="text-3xl font-semibold tracking-tight text-foreground">{rupees(plan.priceInPaise)}</span>
+                    <span className="text-sm text-muted-foreground">/ month</span>
+                  </p>
+                  <ul className="mb-6 mt-6 space-y-2.5 text-sm">
+                    {planRows(plan).map((row) => (
+                      <li key={row.label} className="flex items-center justify-between gap-3">
+                        <span className={row.on === false ? "text-muted-foreground/70" : "text-muted-foreground"}>{row.label}</span>
+                        {row.value != null ? (
+                          <span className="font-medium text-foreground">{row.value}</span>
+                        ) : row.on ? (
+                          <Check className="size-4 text-success-foreground" aria-label="Included" />
+                        ) : (
+                          <Minus className="size-4 text-muted-foreground/60" aria-label="Not included" />
+                        )}
                       </li>
                     ))}
                   </ul>
                   <Button
-                    onClick={() => handleUpgrade(planType)}
+                    onClick={() => handleUpgrade(type)}
                     disabled={!!upgrading || isCurrent}
-                    className={`w-full ${
-                      planType === "PROFESSIONAL"
-                        ? "bg-primary hover:bg-primary/90 text-primary-foreground"
-                        : "bg-muted hover:bg-accent text-foreground"
-                    }`}
+                    variant={recommended ? "default" : "outline"}
+                    className="mt-auto w-full"
                   >
-                    {upgrading === planType ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing…</>
-                    ) : isCurrent ? (
-                      "Current Plan"
-                    ) : (
-                      <><CreditCard className="w-4 h-4 mr-2" />Upgrade</>
-                    )}
+                    {upgrading === type ? <><Loader2 className="size-4 animate-spin" /> Opening checkout…</> : isCurrent ? "Your current plan" : `${direction} to ${plan.name}`}
                   </Button>
                 </div>
               );
@@ -397,119 +343,90 @@ export default function BillingPage() {
       )}
 
       {/* Payment history */}
-      {payments.length > 0 && (
-        <section className="space-y-4">
-          <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-primary" /> Payment History
-          </h2>
-          <div className="bg-card border rounded-2xl overflow-hidden">
+      <Panel title="Payment history" noPadding>
+        {payments.length === 0 ? (
+          <EmptyState icon={Receipt} title="No payments yet" description="Payments for your subscription will appear here." className="m-5" />
+        ) : (
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-muted-foreground uppercase tracking-wider border-b border-border">
+              <thead className="border-b bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <tr>
                   <th className="px-5 py-3 font-medium">Date</th>
                   <th className="px-5 py-3 font-medium">Plan</th>
-                  <th className="px-5 py-3 font-medium">Amount</th>
-                  <th className="px-5 py-3 font-medium text-right">Status</th>
+                  <th className="hidden px-5 py-3 font-medium md:table-cell">Billing period</th>
+                  <th className="hidden px-5 py-3 font-medium sm:table-cell">Reference</th>
+                  <th className="px-5 py-3 text-right font-medium">Amount</th>
+                  <th className="px-5 py-3 text-right font-medium">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="divide-y">
                 {payments.map((p) => (
-                  <tr key={p.id}>
-                    <td className="px-5 py-3 text-muted-foreground">
-                      {new Date(p.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                  <tr key={p.id} className="hover:bg-muted/30">
+                    <td className="px-5 py-3 text-muted-foreground">{fmtDate(p.paidAt || p.createdAt)}</td>
+                    <td className="px-5 py-3 font-medium text-foreground">{p.planType.charAt(0) + p.planType.slice(1).toLowerCase()}</td>
+                    <td className="hidden px-5 py-3 text-muted-foreground md:table-cell">
+                      {p.billingPeriodStart ? `${fmtDate(p.billingPeriodStart)} – ${fmtDate(p.billingPeriodEnd)}` : "—"}
                     </td>
-                    <td className="px-5 py-3 text-foreground font-medium">{p.planType}</td>
-                    <td className="px-5 py-3 text-foreground">₹{(p.amountInPaise / 100).toFixed(0)}</td>
+                    <td className="hidden px-5 py-3 font-mono text-xs text-muted-foreground sm:table-cell">{p.gatewayPaymentId || p.gatewayOrderId || "—"}</td>
+                    <td className="px-5 py-3 text-right tabular-nums text-foreground">{rupees(p.amountInPaise)}</td>
                     <td className="px-5 py-3 text-right">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        p.status === "SUCCESS" ? "bg-emerald-500/15 text-emerald-500" :
-                        p.status === "FAILED" ? "bg-red-500/15 text-red-500" :
-                        p.status === "REFUNDED" ? "bg-blue-500/15 text-blue-500" :
-                        "bg-muted text-muted-foreground"
-                      }`}>
-                        {p.status}
-                      </span>
+                      <StatusBadge tone={PAYMENT_TONE[p.status]}>{p.status.charAt(0) + p.status.slice(1).toLowerCase()}</StatusBadge>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </section>
-      )}
+        )}
+      </Panel>
 
-      {/* Danger zone */}
-      {status !== "CANCELLED" && (
-        <section className="space-y-4">
-          <h2 className="text-base font-semibold text-destructive">Danger Zone</h2>
-          <div className="border border-destructive/20 bg-destructive/5 rounded-xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-foreground font-medium">Cancel Account</h3>
-              <p className="text-muted-foreground text-sm mt-1">
-                Your data will be retained for a grace period before permanent deletion.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => setShowCancelModal(true)}
-              className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:border-destructive/60 shrink-0"
-            >
-              <XCircle className="w-4 h-4 mr-2" />
-              Cancel Account
+      {/* Cancel */}
+      {status !== "CANCELLED" && !scheduled && (
+        <Panel title="Cancel subscription" className="border-destructive/25">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="max-w-xl text-sm text-muted-foreground">
+              Your account becomes read-only and all data is kept for 7 days
+              {status === "ACTIVE" ? " after your paid period ends" : ""}, then deleted. Export anything you need first.
+            </p>
+            <Button variant="outline" onClick={() => setShowCancelModal(true)} className="shrink-0 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive">
+              <XCircle className="size-4" /> Cancel subscription
             </Button>
           </div>
-        </section>
+        </Panel>
       )}
 
-      {/* Cancel confirmation modal */}
-      {showCancelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-card border rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-full bg-destructive/15">
-                <AlertTriangle className="w-5 h-5 text-destructive" />
-              </div>
-              <h3 className="text-foreground font-bold text-lg">Confirm Cancellation</h3>
-            </div>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              Are you sure you want to cancel your account? You'll have a 7-day grace period to change your mind.
-              After that, <strong className="text-foreground">all data will be permanently deleted</strong>.
-            </p>
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground font-medium">Reason (optional)</label>
-              <select
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-foreground text-sm focus:outline-none focus:border-primary"
-              >
-                <option value="">Select a reason…</option>
-                <option value="TOO_EXPENSIVE">Too expensive</option>
-                <option value="NOT_USING">Not using it enough</option>
-                <option value="SWITCHING">Switching to another platform</option>
-                <option value="MISSING_FEATURES">Missing features I need</option>
-                <option value="OTHER">Other</option>
-              </select>
-            </div>
-            <div className="flex gap-3 pt-2">
-              <Button
-                variant="outline"
-                className="flex-1 border-border text-muted-foreground hover:bg-accent"
-                onClick={() => setShowCancelModal(false)}
-                disabled={cancelling}
-              >
-                Keep Account
-              </Button>
-              <Button
-                className="flex-1 bg-destructive hover:bg-destructive/90 text-white"
-                onClick={handleCancel}
-                disabled={cancelling}
-              >
-                {cancelling ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Cancelling…</> : "Confirm Cancel"}
-              </Button>
-            </div>
-          </div>
+      <Modal
+        open={showCancelModal}
+        onClose={() => !cancelling && setShowCancelModal(false)}
+        title="Cancel your subscription?"
+        description="You can ask support to reverse this during the grace period."
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowCancelModal(false)} disabled={cancelling}>Keep subscription</Button>
+            <Button variant="destructive" onClick={handleCancel} disabled={cancelling}>
+              {cancelling ? <><Loader2 className="size-4 animate-spin" /> Cancelling…</> : "Cancel subscription"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <ul className="space-y-2 text-sm text-muted-foreground">
+            <li className="flex gap-2"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" /> Everyone keeps read-only access for 7 days.</li>
+            <li className="flex gap-2"><AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" /> After that, users, exams and results are <strong className="text-foreground">permanently deleted</strong>.</li>
+          </ul>
+          <Field label="Why are you leaving? (optional)">
+            <select value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} className={selectClass}>
+              <option value="">Select a reason…</option>
+              <option value="TOO_EXPENSIVE">Too expensive</option>
+              <option value="NOT_USING">Not using it enough</option>
+              <option value="SWITCHING">Switching to another platform</option>
+              <option value="MISSING_FEATURES">Missing features we need</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </Field>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

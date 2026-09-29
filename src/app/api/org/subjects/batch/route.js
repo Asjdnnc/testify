@@ -1,5 +1,5 @@
 import { createSubjectsBatch } from "@/lib/services/org.service.js";
-import jwt from "jsonwebtoken";
+import { requireAuth, resolveCollegeId, errorResponse } from "@/lib/server-auth.js";
 import * as XLSX from "xlsx";
 
 /**
@@ -9,13 +9,9 @@ import * as XLSX from "xlsx";
 export async function POST(req) {
   try {
     // 1. Auth Check
-    const token = req.headers.get("Authorization")?.split(" ")[1] || req.cookies.get("token")?.value;
-    if (!token) return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.role !== "ADMIN" && decoded.role !== "SUPER_ADMIN") {
-        return Response.json({ success: false, message: "Forbidden" }, { status: 403 });
-    }
+    const auth = await requireAuth(req, { roles: ["ADMIN", "SUPER_ADMIN"], subscription: true });
+    const { searchParams } = new URL(req.url);
+    const collegeId = resolveCollegeId(auth, searchParams.get("collegeId"));
 
     const contentType = req.headers.get("content-type") || "";
     let subjectsList = [];
@@ -57,7 +53,7 @@ export async function POST(req) {
       return Response.json({ success: false, message: "No subjects found to process" }, { status: 400 });
     }
 
-    const result = await createSubjectsBatch(decoded.collegeId, subjectsList);
+    const result = await createSubjectsBatch(collegeId, subjectsList);
 
     return Response.json({
       success: true,
@@ -66,10 +62,6 @@ export async function POST(req) {
     });
 
   } catch (error) {
-    console.error("[SUBJECTS_BATCH_API_ERROR]", error);
-    return Response.json({
-      success: false,
-      message: error.message || "An error occurred"
-    }, { status: 500 });
+    return errorResponse(error, 500);
   }
 }

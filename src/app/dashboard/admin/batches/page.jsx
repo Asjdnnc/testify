@@ -13,7 +13,7 @@ import {
 function ConfirmModal({ message, onConfirm, onCancel, loading }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-      <div className="bg-card border rounded-3xl p-8 shadow-2xl w-full max-w-sm space-y-6 animate-in zoom-in duration-200">
+      <div className="bg-card border rounded-2xl p-8 shadow-2xl w-full max-w-sm space-y-6 animate-in zoom-in duration-200">
         <div className="w-12 h-12 rounded-2xl bg-destructive/10 flex items-center justify-center mx-auto">
           <Trash2 className="w-6 h-6 text-destructive" />
         </div>
@@ -151,17 +151,14 @@ function BatchesContent() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-4">
              <button onClick={() => router.push("/dashboard/admin/branches")}
-                className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors group">
-                <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" /> Back to Departments
+                className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted-foreground hover:text-primary transition-colors group">
+                <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" /> Back to branches
             </button>
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-[24px] bg-primary/10 flex items-center justify-center border border-primary/20 shadow-inner">
-              <GraduationCap className="w-7 h-7 text-primary" />
-            </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">Academic Batches</h1>
-              <p className="text-muted-foreground text-[13px] font-medium italic">
-                {selectedBranch ? `Managing segments for ${selectedBranch.name}` : "Select a department to manage student cycles."}
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">Batches</h1>
+              <p className="text-muted-foreground text-sm">
+                {selectedBranch ? `Batches in ${selectedBranch.name}` : "Pick a branch to see and manage its graduating batches."}
               </p>
             </div>
           </div>
@@ -171,7 +168,7 @@ function BatchesContent() {
         {maintenanceRunning && (
             <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 px-4 py-2 rounded-2xl animate-pulse">
                 <RefreshCw className="w-3.5 h-3.5 text-primary animate-spin" />
-                <span className="text-[10px] font-bold text-primary uppercase">Automated Sync in Progress...</span>
+                <span className="text-xs font-bold text-primary ">Automated Sync in Progress...</span>
             </div>
         )}
       </div>
@@ -181,19 +178,19 @@ function BatchesContent() {
         {error && (
             <div className="flex items-center gap-3 text-destructive bg-destructive/5 border border-destructive/10 rounded-2xl p-4 text-xs animate-in slide-in-from-top-2">
             <AlertCircle className="w-4 h-4 shrink-0" /> {error}
-            <button onClick={() => setError("")} className="ml-auto underline font-bold uppercase tracking-tighter text-[10px]">Dismiss</button>
+            <button onClick={() => setError("")} className="ml-auto underline font-bold tracking-tight text-xs">Dismiss</button>
             </div>
         )}
         {success && (
-            <div className="flex items-center gap-3 text-emerald-500 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl p-4 text-xs animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-3 text-success-foreground bg-emerald-500/5 border border-success/40 rounded-2xl p-4 text-xs animate-in slide-in-from-top-2">
             <Check className="w-4 h-4 shrink-0" /> {success}
             </div>
         )}
       </div>
 
       {/* Branch Context Switching */}
-      <div className="bg-card border rounded-[32px] p-2 flex items-center shadow-inner group">
-        <div className="w-12 h-12 rounded-[24px] flex items-center justify-center text-muted-foreground group-focus-within:text-primary transition-colors">
+      <div className="bg-card border rounded-2xl p-2 flex items-center shadow-inner group">
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center text-muted-foreground group-focus-within:text-primary transition-colors">
             <Layers className="w-5 h-5" />
         </div>
         <select
@@ -201,7 +198,7 @@ function BatchesContent() {
           value={branchId || ""}
           onChange={(e) => router.push(`/dashboard/admin/batches?branchId=${e.target.value}`)}
         >
-          <option value="" disabled>Select Department Context</option>
+          <option value="" disabled>Choose a branch</option>
           {branches.map((b) => (
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
@@ -212,12 +209,12 @@ function BatchesContent() {
       </div>
 
       {!branchId ? (
-        <div className="bg-card border border-dashed rounded-[40px] py-32 text-center space-y-4 opacity-50">
-          <div className="w-20 h-20 rounded-3xl bg-muted/50 flex items-center justify-center mx-auto">
+        <div className="bg-card border border-dashed rounded-2xl py-32 text-center space-y-4 opacity-50">
+          <div className="w-20 h-20 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto">
             <GraduationCap className="w-10 h-10 text-muted-foreground/40" />
           </div>
           <div className="space-y-1">
-            <p className="text-sm font-bold text-foreground">No Department Selected</p>
+            <p className="text-sm font-bold text-foreground">No branch selected</p>
             <p className="text-xs text-muted-foreground max-w-xs mx-auto">Please choose an academic department above to view and manage its student batches.</p>
           </div>
         </div>
@@ -225,9 +222,9 @@ function BatchesContent() {
         <div className="grid gap-8 lg:grid-cols-12 animate-in fade-in duration-500">
           {/* Create Workspace */}
           <div className="lg:col-span-4">
-            <div className="bg-card border rounded-[32px] p-8 space-y-6 h-fit sticky top-24 shadow-sm">
+            <div className="bg-card border rounded-2xl p-8 space-y-6 h-fit sticky top-24 shadow-sm">
                 <div className="space-y-1">
-                    <h2 className="text-sm font-bold text-foreground uppercase tracking-widest flex items-center gap-2">
+                    <h2 className="text-sm font-bold text-foreground tracking-wide flex items-center gap-2">
                     <Plus className="w-4 h-4 text-primary" /> New Cohort
                     </h2>
                     <p className="text-[11px] text-muted-foreground font-medium">Add a unique academic intake cycle.</p>
@@ -235,7 +232,7 @@ function BatchesContent() {
                 
                 <form onSubmit={handleCreate} className="space-y-5">
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-muted-foreground tracking-widest uppercase pl-1">Name</label>
+                    <label className="text-xs font-semibold text-muted-foreground tracking-wide pl-1">Name</label>
                     <input
                     placeholder="e.g. Class of 2028"
                     value={formData.name}
@@ -245,7 +242,7 @@ function BatchesContent() {
                     />
                 </div>
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-muted-foreground tracking-widest uppercase pl-1">Graduation Year</label>
+                    <label className="text-xs font-semibold text-muted-foreground tracking-wide pl-1">Graduation Year</label>
                     <div className="relative">
                         <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
@@ -272,11 +269,11 @@ function BatchesContent() {
 
           {/* Directory Workspace */}
           <div className="lg:col-span-8">
-            <div className="bg-card border rounded-[32px] overflow-hidden shadow-sm flex flex-col h-full min-h-[500px]">
+            <div className="bg-card border rounded-2xl overflow-hidden shadow-sm flex flex-col h-full min-h-[500px]">
                 <div className="p-6 border-b border-border/40 flex items-center justify-between bg-muted/10">
                     <div className="space-y-0.5">
-                        <h2 className="text-sm font-bold text-foreground">Cohort Directory</h2>
-                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">{batches.length} Batches listed in {selectedBranch?.name}</p>
+                        <h2 className="text-sm font-bold text-foreground">Batches</h2>
+                        <p className="text-xs text-muted-foreground font-bold tracking-wider">{batches.length} Batches listed in {selectedBranch?.name}</p>
                     </div>
                 </div>
 
@@ -284,12 +281,12 @@ function BatchesContent() {
                 {loading ? (
                     <div className="flex flex-col items-center justify-center py-32 space-y-4">
                         <div className="w-12 h-12 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
-                        <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[5px]">Refreshing</p>
+                        <p className="text-xs font-semibold text-muted-foreground tracking-[5px]">Refreshing</p>
                     </div>
                 ) : batches.length === 0 ? (
                     <div className="text-center py-32 space-y-4 opacity-50">
                         <GraduationCap className="w-12 h-12 text-muted-foreground/30 mx-auto" />
-                        <p className="text-xs text-muted-foreground font-medium italic">No batches defined for this department.</p>
+                        <p className="text-xs text-muted-foreground font-medium ">No batches defined for this department.</p>
                     </div>
                 ) : (
                     <div className="divide-y divide-border/30">
@@ -313,7 +310,7 @@ function BatchesContent() {
                                 className="w-24 h-10 px-4 text-sm rounded-xl border border-border bg-background focus:outline-none"
                                 />
                                 <button onClick={() => handleSaveEdit(batch.id)} disabled={saving}
-                                className="p-2.5 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20">
+                                className="p-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-lg ">
                                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                                 </button>
                                 <button onClick={() => setEditingId(null)}
@@ -354,7 +351,7 @@ function BatchesContent() {
                 </div>
                 
                 {/* Legend */}
-                <div className="p-6 bg-muted/20 border-t border-border/40 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest flex items-center gap-4">
+                <div className="p-6 bg-muted/20 border-t border-border/40 text-xs font-bold text-muted-foreground/60 tracking-wide flex items-center gap-4">
                     <div className="flex items-center gap-1.5"><Info className="w-3 h-3" /> Manual override supported.</div>
                     <div className="flex items-center gap-1.5"><RefreshCw className="w-3 h-3" /> Every July 1st, a new intake is automatically added.</div>
                 </div>

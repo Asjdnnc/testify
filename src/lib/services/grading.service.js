@@ -1,6 +1,80 @@
 import prisma from "../prisma.js";
 import { safeWrite, safeQuery } from "../db-retry.js";
 
+// --- Shared scoring helpers ---
+function toGradePoint(percentage) {
+  // Simple US 4.0 Scale Mapping
+  if (percentage >= 90) return 4.0;
+  if (percentage >= 80) return 3.0;
+  if (percentage >= 70) return 2.0;
+  if (percentage >= 60) return 1.0;
+  return 0.0;
+}
+
+function summarise(exam, totalMarks) {
+  const examTotal = exam.totalMarks || 1; // prevent div by zero
+  const percentage = (totalMarks / examTotal) * 100;
+  const isPassed = exam.passingMarks ? totalMarks >= exam.passingMarks : percentage >= 40;
+  return { percentage, isPassed, gradePoint: toGradePoint(percentage) };
+}
+
+/**
+ * Recomputes the Result row for an attempt from the Answer rows.
+ * MCQ marks come from auto-grading; SUBJECTIVE marks from teachers.
+ * A result that was already PUBLISHED stays published.
+ */
+async function recomputeResult(client, attemptId) {
+  const attempt = await client.attempt.findUnique({
+    where: { id: attemptId },
+    include: {
+      exam: { include: { questions: { include: { question: { select: { type: true } } } } } },
+      answers: true,
+      result: { select: { gradingStatus: true } },
+    },
+  });
+  if (!attempt) return null;
+
+  const answersByQuestion = new Map(attempt.answers.map(a => [a.questionId, a]));
+
+  let total = 0;
+  let pendingSubjective = false;
+  for (const eq of attempt.exam.questions) {
+    const answer = answersByQuestion.get(eq.questionId);
+    if (eq.question.type === "SUBJECTIVE") {
+      // An unanswered subjective question needs no review (scores 0)
+      if (answer && answer.marksObtained === null && (answer.subjectiveText || "").trim() !== "") {
+        pendingSubjective = true;
+      }
+    }
+    total += answer?.marksObtained || 0;
+  }
+
+  const { percentage, isPassed, gradePoint } = summarise(attempt.exam, total);
+  const wasPublished = attempt.result?.gradingStatus === "PUBLISHED";
+  const gradingStatus = pendingSubjective
+    ? "MANUAL_REVIEW_PENDING"
+    : wasPublished
+      ? "PUBLISHED"
+      : attempt.exam.questions.some(eq => eq.question.type === "SUBJECTIVE")
+        ? "FULLY_GRADED"
+        : "AUTO_GRADED";
+
+  const data = { totalMarksObtained: total, percentage, isPassed, gradePoint, gradingStatus };
+
+  await client.attempt.update({ where: { id: attemptId }, data: { score: total } });
+
+  return client.result.upsert({
+    where: { attemptId },
+    update: data,
+    create: {
+      attemptId,
+      studentId: attempt.userId,
+      examId: attempt.examId,
+      ...data,
+    },
+  });
+}
+
 // --- Manual Grading ---
 export async function gradeSubjectiveAnswer(teacherId, answerId, marksObtained, feedback) {
   const answer = await prisma.answer.findUnique({
@@ -10,10 +84,17 @@ export async function gradeSubjectiveAnswer(teacherId, answerId, marksObtained, 
 
   if (!answer) throw new Error("Answer not found");
   if (answer.attempt.exam.creatorId !== teacherId) throw new Error("Unauthorized to grade this exam");
+  if (answer.attempt.status === "IN_PROGRESS") throw new Error("Attempt has not been submitted yet");
 
-  // Validate marks
-  const maxMarks = answer.question.defaultMarks; // Note: for ExamQuestion overridden marks, we'd need to query that table. Simple fallback here.
-  if (marksObtained < 0 || marksObtained > maxMarks) {
+  // Max marks come from the exam's own weighting (ExamQuestion.marks),
+  // falling back to the bank default.
+  const examQuestion = await prisma.examQuestion.findUnique({
+    where: { examId_questionId: { examId: answer.attempt.examId, questionId: answer.questionId } },
+    select: { marks: true }
+  });
+  const maxMarks = examQuestion?.marks ?? answer.question.defaultMarks;
+
+  if (!Number.isFinite(marksObtained) || marksObtained < 0 || marksObtained > maxMarks) {
     throw new Error(`Marks must be between 0 and ${maxMarks}`);
   }
 
@@ -22,92 +103,76 @@ export async function gradeSubjectiveAnswer(teacherId, answerId, marksObtained, 
     where: { id: answerId },
     data: {
       marksObtained,
-      teacherFeedback: feedback,
+      teacherFeedback: feedback ?? null,
       gradedById: teacherId,
       isCorrect: marksObtained > 0
     }
   });
 
   // Re-calculate Result total score
-  const allAnswers = await prisma.answer.findMany({ where: { attemptId: answer.attemptId } });
-  
-  const newTotal = allAnswers.reduce((sum, ans) => sum + (ans.marksObtained || 0), 0);
-  const percentage = (newTotal / answer.attempt.exam.totalMarks) * 100;
-  
-  const isPassed = answer.attempt.exam.passingMarks ? newTotal >= answer.attempt.exam.passingMarks : percentage >= 40;
+  const result = await recomputeResult(prisma, answer.attemptId);
 
-  // Simple US 4.0 Scale Mapping
-  let gradePoint = 0.0;
-  if (percentage >= 90) gradePoint = 4.0;
-  else if (percentage >= 80) gradePoint = 3.0;
-  else if (percentage >= 70) gradePoint = 2.0;
-  else if (percentage >= 60) gradePoint = 1.0;
-
-  // Check if fully graded
-  const remainingSubjective = allAnswers.some(a => a.question.type === "SUBJECTIVE" && a.marksObtained === null);
-
-  await prisma.result.update({
-    where: { attemptId: answer.attemptId },
-    data: {
-      totalMarksObtained: newTotal,
-      percentage: percentage,
-      isPassed: isPassed,
-      gradePoint: gradePoint,
-      gradingStatus: remainingSubjective ? "MANUAL_REVIEW_PENDING" : "FULLY_GRADED"
-    }
-  });
-
-  return { success: true, newTotal, percentage, gradePoint };
+  return {
+    success: true,
+    newTotal: result.totalMarksObtained,
+    percentage: result.percentage,
+    gradePoint: result.gradePoint,
+    gradingStatus: result.gradingStatus,
+  };
 }
 
 // --- GPA Engine ---
 export async function calculateSemesterGPA(studentId, semester) {
-  // Find all Enrollments for the student in this semester
-  const enrollments = await prisma.enrollment.findMany({
-    where: { studentId, semester },
-    include: { subject: true }
-  });
+  // Subjects that count towards this semester's GPA:
+  //   • any subject the student has a graded result for in a semester-N exam
+  //   • plus explicit enrolments (a subject with no graded exam yet counts as 0)
+  const [enrollments, gradedResults] = await Promise.all([
+    prisma.enrollment.findMany({ where: { studentId, semester }, include: { subject: true } }),
+    prisma.result.findMany({
+      where: {
+        studentId,
+        exam: { semester },
+        gradingStatus: { in: ["AUTO_GRADED", "FULLY_GRADED", "PUBLISHED"] },
+      },
+      include: { exam: { include: { subject: true } } },
+    }),
+  ]);
+
+  const subjects = new Map();
+  for (const e of enrollments) subjects.set(e.subjectId, { subject: e.subject, best: null });
+  for (const r of gradedResults) {
+    const entry = subjects.get(r.exam.subjectId) || { subject: r.exam.subject, best: null };
+    // Best graded attempt per subject counts (e.g. a re-test replaces a weak quiz)
+    if (!entry.best || (r.gradePoint ?? 0) > (entry.best.gradePoint ?? 0)) entry.best = r;
+    subjects.set(r.exam.subjectId, entry);
+  }
 
   let totalQualityPoints = 0;
   let totalCredits = 0;
   const breakDown = [];
 
-  for (const enrollment of enrollments) {
-    const credits = enrollment.subject.credits;
-    
-    // Find highest Result for this subject in the specific semester exams
-    const results = await prisma.result.findMany({
-      where: {
-        studentId,
-        exam: { subjectId: enrollment.subjectId, semester: semester },
-        gradingStatus: { in: ["AUTO_GRADED", "FULLY_GRADED", "PUBLISHED"] }
-      },
-      orderBy: { gradePoint: 'desc' }, // take best attempt if multiple exist
-      take: 1,
-      include: { exam: true }
-    });
-
-    const gradePoint = results.length > 0 ? (results[0].gradePoint || 0) : 0;
-    
-    totalQualityPoints += (gradePoint * credits);
+  for (const { subject, best } of subjects.values()) {
+    const credits = subject.credits;
+    const gradePoint = best?.gradePoint ?? 0;
+    totalQualityPoints += gradePoint * credits;
     totalCredits += credits;
-
     breakDown.push({
-       subject: enrollment.subject.name,
-       credits,
-       gradePoint,
-       examTitle: results.length > 0 ? results[0].exam.title : "No Data"
+      subject: subject.name,
+      credits,
+      gradePoint,
+      percentage: best?.percentage ?? null,
+      examTitle: best ? best.exam.title : "No graded exam yet",
     });
   }
 
-  const gpa = totalCredits > 0 ? (totalQualityPoints / totalCredits).toFixed(2) : 0.00;
+  const gpa = totalCredits > 0 ? (totalQualityPoints / totalCredits).toFixed(2) : "0.00";
 
   return {
     studentId,
     semester,
     gpa,
     totalCredits,
-    breakDown
+    breakDown: breakDown.sort((a, b) => a.subject.localeCompare(b.subject)),
   };
 }
 
@@ -154,7 +219,7 @@ export async function getExamAttemptsForGrading(teacherId, examId) {
 
   if (!exam || exam.creatorId !== teacherId) throw new Error("Unauthorized");
 
-  return prisma.result.findMany({
+  const results = await prisma.result.findMany({
     where: { examId },
     include: {
       student: {
@@ -163,9 +228,13 @@ export async function getExamAttemptsForGrading(teacherId, examId) {
       attempt: {
         select: { id: true, status: true, submittedAt: true }
       }
-    },
-    orderBy: { gradingStatus: 'asc' } // show pending first
+    }
   });
+
+  // Show pending reviews first (enum order would put AUTO_GRADED first)
+  return results.sort((a, b) =>
+    (a.gradingStatus === "MANUAL_REVIEW_PENDING" ? 0 : 1) - (b.gradingStatus === "MANUAL_REVIEW_PENDING" ? 0 : 1)
+  );
 }
 
 export async function getFullAttemptForGrading(teacherId, attemptId) {
@@ -192,7 +261,11 @@ export async function getFullAttemptForGrading(teacherId, attemptId) {
           question: true
         }
       },
-      result: true
+      result: true,
+      logs: {
+        select: { event: true, metadata: true, createdAt: true },
+        orderBy: { createdAt: 'asc' }
+      }
     }
   });
 
@@ -205,7 +278,9 @@ export async function getFullAttemptForGrading(teacherId, attemptId) {
 
 export async function autoGradeAttempt(attemptId, tx = null) {
   const client = tx || prisma;
-  
+  // Retrying inside an interactive transaction is pointless (the tx is aborted)
+  const write = tx ? (fn) => fn() : (fn) => safeWrite(fn);
+
   try {
     const attempt = await client.attempt.findUnique({
       where: { id: attemptId },
@@ -219,11 +294,7 @@ export async function autoGradeAttempt(attemptId, tx = null) {
             }
           }
         },
-        answers: {
-          include: {
-            question: true
-          }
-        }
+        answers: true
       }
     });
 
@@ -232,89 +303,39 @@ export async function autoGradeAttempt(attemptId, tx = null) {
       return null;
     }
 
-    let totalMarks = 0;
-    let hasSubjective = false;
-
-    const gradingUpdates = attempt.exam.questions.map((eq) => {
+    // Grade MCQs sequentially to avoid write batch active errors.
+    // SUBJECTIVE answers keep whatever marks a teacher already awarded.
+    for (const eq of attempt.exam.questions) {
       const answer = attempt.answers.find((a) => a.questionId === eq.questionId);
-      if (!answer) return null;
+      if (!answer || eq.question.type === "SUBJECTIVE") continue;
 
-      const isMcq = eq.question.type !== "SUBJECTIVE";
-      if (isMcq) {
-        const studentResponseIds = answer.selectedOptions || [];
-        
-        let originalOptions = [];
-        try {
-            if (eq.optionsSnapshot) originalOptions = JSON.parse(eq.optionsSnapshot);
-        } catch(e) {}
-        
-        const studentResponseLabels = studentResponseIds.map(idOrLabel => {
-            const opt = originalOptions.find(o => o.id === idOrLabel || o.label === idOrLabel);
-            return opt ? opt.label : idOrLabel;
-        });
+      let originalOptions = [];
+      try {
+        if (eq.optionsSnapshot) {
+          originalOptions = typeof eq.optionsSnapshot === "string" ? JSON.parse(eq.optionsSnapshot) : eq.optionsSnapshot;
+        }
+      } catch (e) {}
 
-        const studentResponse = studentResponseLabels.sort();
-        const correctResponse = (eq.correctAnswersSnapshot || []).sort();
-        
-        const isCorrect = JSON.stringify(studentResponse) === JSON.stringify(correctResponse);
-        const marks = isCorrect ? eq.marks : 0;
-        
-        totalMarks += marks;
+      const studentResponse = [...new Set((answer.selectedOptions || []).map(idOrLabel => {
+        const opt = originalOptions.find(o => o.id === idOrLabel || o.label === idOrLabel);
+        return opt ? opt.label : idOrLabel;
+      }))].sort();
+      const correctResponse = [...(eq.correctAnswersSnapshot || [])].sort();
 
-        // Return a lazy promise wrapper to ensure sequential execution
-        return () => safeWrite(() => client.answer.update({
-          where: { id: answer.id },
-          data: {
-            marksObtained: marks,
-            isCorrect: isCorrect
-          }
-        }));
-      } else {
-        hasSubjective = true;
-        return null;
-      }
-    }).filter(Boolean);
+      const isCorrect = correctResponse.length > 0 &&
+        JSON.stringify(studentResponse) === JSON.stringify(correctResponse);
+      const marks = isCorrect ? eq.marks : 0;
 
-    // Run answer updates sequentially to avoid write batch active errors
-    if (gradingUpdates.length > 0) {
-       for (const updateOp of gradingUpdates) {
-           await updateOp();
-       }
+      await write(() => client.answer.update({
+        where: { id: answer.id },
+        data: {
+          marksObtained: marks,
+          isCorrect: isCorrect
+        }
+      }));
     }
 
-    // Recalculate totals safely
-    const examTotal = attempt.exam.totalMarks || 1; // prevent div by zero
-    const percentage = (totalMarks / examTotal) * 100;
-    const isPassed = attempt.exam.passingMarks ? totalMarks >= attempt.exam.passingMarks : percentage >= 40;
-
-    // Map to 4.0 scale
-    let gradePoint = 0.0;
-    if (percentage >= 90) gradePoint = 4.0;
-    else if (percentage >= 80) gradePoint = 3.0;
-    else if (percentage >= 70) gradePoint = 2.0;
-    else if (percentage >= 60) gradePoint = 1.0;
-
-    // Create Result row
-    return client.result.upsert({
-      where: { attemptId },
-      update: {
-        totalMarksObtained: totalMarks,
-        percentage,
-        isPassed,
-        gradePoint,
-        gradingStatus: hasSubjective ? "MANUAL_REVIEW_PENDING" : "AUTO_GRADED"
-      },
-      create: {
-        attemptId,
-        studentId: attempt.userId,
-        examId: attempt.examId,
-        totalMarksObtained: totalMarks,
-        percentage,
-        isPassed,
-        gradePoint,
-        gradingStatus: hasSubjective ? "MANUAL_REVIEW_PENDING" : "AUTO_GRADED"
-      }
-    });
+    return recomputeResult(client, attemptId);
   } catch (err) {
     console.error(`[Grading Engine] Error grading attempt ${attemptId}:`, err);
     throw err; // Re-throw to inform the caller
@@ -357,7 +378,8 @@ export async function getStudentResultSummary(studentId) {
   });
 
   // Unique semesters from results
-  const semesters = [...new Set(results.map(r => r.exam.semester).filter(Boolean))];
+  // Newest semester first, so gpaBySemester[0] is the current one
+  const semesters = [...new Set(results.map(r => r.exam.semester).filter(Boolean))].sort((a, b) => b - a);
   
   const gpaBySemester = [];
   for (const sem of semesters) {
@@ -365,8 +387,16 @@ export async function getStudentResultSummary(studentId) {
       gpaBySemester.push(gpa);
   }
 
+  // Cumulative GPA: credit-weighted across all semesters
+  let qp = 0, cr = 0;
+  for (const g of gpaBySemester) {
+    for (const b of g.breakDown) { qp += b.gradePoint * b.credits; cr += b.credits; }
+  }
+  const cgpa = cr > 0 ? (qp / cr).toFixed(2) : null;
+
   return {
     results,
-    gpaBySemester
+    gpaBySemester,
+    cgpa
   };
 }

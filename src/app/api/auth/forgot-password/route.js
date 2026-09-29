@@ -33,19 +33,22 @@ export async function POST(req) {
       }
     });
 
-    // Send the email
+    // Send the email (failure must not reveal whether the account exists)
     await sendPasswordResetEmail({
       to: user.email,
       contactName: user.name,
       resetToken: token
-    });
+    }).catch((err) => console.error("[FORGOT_PASSWORD_EMAIL_ERROR]", err?.message || err));
 
-    // Helpful console log for dev environment since real email might get suppressed by Resend
-    console.log(`\n========================================`);
-    console.log(`🔑 PASSWORD RESET INITIATED`);
-    console.log(`📧 User: ${user.email}`);
-    console.log(`🔗 Reset Link: ${process.env.APP_URL}/reset-password?token=${token}`);
-    console.log(`========================================\n`);
+    // Dev-only: real email might get suppressed by Resend's free tier.
+    // Never log reset links in production — they grant account takeover.
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`\n========================================`);
+      console.log(`🔑 PASSWORD RESET INITIATED`);
+      console.log(`📧 User: ${user.email}`);
+      console.log(`🔗 Reset Link: ${process.env.APP_URL}/reset-password?token=${token}`);
+      console.log(`========================================\n`);
+    }
 
     return Response.json({ success: true, message: "If your email is registered, a reset link will be sent shortly." });
 

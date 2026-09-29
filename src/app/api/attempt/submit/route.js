@@ -1,14 +1,11 @@
-import { verifyToken } from "@/lib/middlewares/auth.middleware.js";
-import { requireRole } from "@/lib/middlewares/role.middleware.js";
+import { requireAuth, errorResponse } from "@/lib/server-auth.js";
 import { submitAttempt } from "@/lib/services/attempt.service.js";
 
 export async function POST(req) {
 
   try {
 
-    const decoded = verifyToken(req);
-
-    requireRole("STUDENT")(decoded);
+    const decoded = await requireAuth(req, { roles: ["STUDENT"] });
 
     const body = await req.json();
 
@@ -24,10 +21,7 @@ export async function POST(req) {
 
   } catch (error) {
 
-    return Response.json({
-      success: false,
-      message: error.message
-    }, { status: 400 });
+    return errorResponse(error);
 
   }
 

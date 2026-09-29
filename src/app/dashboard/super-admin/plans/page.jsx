@@ -8,9 +8,9 @@ import {
 } from "lucide-react";
 
 const PLAN_COLORS = {
-  TRIAL: "text-amber-500 border-amber-500/30 bg-amber-500/10",
+  TRIAL: "text-warning-foreground border-warning/40 bg-amber-500/10",
   STARTER: "text-blue-500 border-blue-500/30 bg-blue-500/10",
-  PROFESSIONAL: "text-indigo-500 border-indigo-500/30 bg-indigo-500/10",
+  PROFESSIONAL: "text-primary border-primary bg-primary/10",
   ENTERPRISE: "text-purple-500 border-purple-500/30 bg-purple-500/10",
 };
 
@@ -38,7 +38,7 @@ function NullableNumberInput({ value, onChange }) {
         type="button"
         onClick={() => onChange(isUnlimited ? 10 : null)}
         className={`shrink-0 p-1.5 rounded-lg border transition-colors ${
-          isUnlimited ? "bg-indigo-500/15 border-indigo-500/30 text-indigo-400" : "bg-muted border-border text-muted-foreground"
+          isUnlimited ? "bg-primary/15 border-primary text-primary" : "bg-muted border-border text-muted-foreground"
         }`}
         title={isUnlimited ? "Currently unlimited — click to set a limit" : "Click to set unlimited"}
       >
@@ -53,7 +53,7 @@ function NullableNumberInput({ value, onChange }) {
           className="w-20 h-8 px-2 text-sm rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
         />
       ) : (
-        <span className="text-sm text-muted-foreground italic">Unlimited</span>
+        <span className="text-sm text-muted-foreground ">Unlimited</span>
       )}
     </div>
   );
@@ -124,7 +124,7 @@ function PlanCard({ plan, onSave }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {success && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+          {success && <CheckCircle2 className="w-4 h-4 text-success-foreground" />}
           {!editing ? (
             <button
               onClick={() => setEditing(true)}
@@ -163,7 +163,7 @@ function PlanCard({ plan, onSave }) {
         {/* Pricing */}
         {editing && (
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Pricing</p>
+            <p className="text-xs font-semibold tracking-wider text-muted-foreground mb-3">Pricing</p>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Price (Paise)</label>
@@ -188,7 +188,7 @@ function PlanCard({ plan, onSave }) {
 
         {/* Resource limits */}
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Resource Limits</p>
+          <p className="text-xs font-semibold tracking-wider text-muted-foreground mb-3">Resource Limits</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {RESOURCE_FIELDS.filter((f) => f.key !== "durationDays" || !editing).map(({ key, label }) => (
               <div key={key} className="bg-muted/40 rounded-xl p-3 space-y-1.5">
@@ -210,7 +210,7 @@ function PlanCard({ plan, onSave }) {
 
         {/* Features */}
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Features</p>
+          <p className="text-xs font-semibold tracking-wider text-muted-foreground mb-3">Features</p>
           <div className="grid grid-cols-2 gap-2">
             {FEATURE_KEYS.map((key) => {
               const enabled = editing ? draft.features?.[key] : plan.features?.[key];
@@ -221,7 +221,7 @@ function PlanCard({ plan, onSave }) {
                     <button
                       type="button"
                       onClick={() => setFeature(key, !draft.features?.[key])}
-                      className={`transition-colors ${draft.features?.[key] ? "text-emerald-500" : "text-muted-foreground"}`}
+                      className={`transition-colors ${draft.features?.[key] ? "text-success-foreground" : "text-muted-foreground"}`}
                     >
                       {draft.features?.[key] ? (
                         <ToggleRight className="w-6 h-6" />
@@ -231,7 +231,7 @@ function PlanCard({ plan, onSave }) {
                     </button>
                   ) : (
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      enabled ? "bg-emerald-500/15 text-emerald-500" : "bg-muted text-muted-foreground"
+                      enabled ? "bg-emerald-500/15 text-success-foreground" : "bg-muted text-muted-foreground"
                     }`}>{enabled ? "Yes" : "No"}</span>
                   )}
                 </div>
@@ -250,7 +250,7 @@ function PlanCard({ plan, onSave }) {
             <button
               type="button"
               onClick={() => setField("isActive", !draft.isActive)}
-              className={`transition-colors ${draft.isActive ? "text-emerald-500" : "text-muted-foreground"}`}
+              className={`transition-colors ${draft.isActive ? "text-success-foreground" : "text-muted-foreground"}`}
             >
               {draft.isActive ? <ToggleRight className="w-7 h-7" /> : <ToggleLeft className="w-7 h-7" />}
             </button>
@@ -282,17 +282,11 @@ export default function PlansPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link href="/dashboard/super-admin" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Overview
-        </Link>
-        <div className="h-4 w-px bg-border" />
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <CreditCard className="w-6 h-6 text-primary" /> Subscription Plans
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Plans & pricing</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             Edit pricing, resource limits and feature flags for each plan. Changes apply immediately.
           </p>

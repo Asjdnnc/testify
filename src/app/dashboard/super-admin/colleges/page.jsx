@@ -9,11 +9,11 @@ import {
 } from "lucide-react";
 
 const STATUS_CONFIG = {
-  TRIAL:        { label: "Trial",     icon: Clock,          cls: "bg-amber-500/15 text-amber-500 border-amber-500/20" },
-  TRIAL_EXPIRED:{ label: "Expired",   icon: AlertTriangle,  cls: "bg-red-500/15 text-red-500 border-red-500/20" },
-  ACTIVE:       { label: "Active",    icon: CheckCircle2,   cls: "bg-emerald-500/15 text-emerald-500 border-emerald-500/20" },
+  TRIAL:        { label: "Trial",     icon: Clock,          cls: "bg-amber-500/15 text-warning-foreground border-warning/40" },
+  TRIAL_EXPIRED:{ label: "Expired",   icon: AlertTriangle,  cls: "bg-red-500/15 text-destructive border-destructive/40" },
+  ACTIVE:       { label: "Active",    icon: CheckCircle2,   cls: "bg-emerald-500/15 text-success-foreground border-success/40" },
   SUSPENDED:    { label: "Suspended", icon: AlertTriangle,  cls: "bg-orange-500/15 text-orange-500 border-orange-500/20" },
-  CANCELLED:    { label: "Cancelled", icon: XCircle,        cls: "bg-red-500/15 text-red-500 border-red-500/20" },
+  CANCELLED:    { label: "Cancelled", icon: XCircle,        cls: "bg-red-500/15 text-destructive border-destructive/40" },
 };
 
 const FILTERS = [
@@ -38,9 +38,9 @@ function StatusBadge({ status }) {
 function QuickActionButton({ label, icon: Icon, onClick, variant = "default", loading }) {
   const styles = {
     default: "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
-    danger:  "border-red-500/30 text-red-500 hover:bg-red-500/10",
+    danger:  "border-destructive/40 text-destructive hover:bg-red-500/10",
     warning: "border-orange-500/30 text-orange-500 hover:bg-orange-500/10",
-    success: "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10",
+    success: "border-success/40 text-success-foreground hover:bg-emerald-500/10",
   };
   return (
     <button
@@ -119,21 +119,15 @@ export default function CollegesPage() {
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Toast */}
       {toast && (
-        <div className="fixed top-4 right-4 z-50 bg-emerald-500 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 animate-in slide-in-from-top-2">
+        <div className="fixed top-4 right-4 z-50 bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 animate-in slide-in-from-top-2">
           <CheckCircle2 className="w-4 h-4" /> {toast}
         </div>
       )}
 
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link href="/dashboard/super-admin" className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Overview
-        </Link>
-        <div className="h-4 w-px bg-border" />
         <div className="flex-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <School className="w-6 h-6 text-primary" /> College Management
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Colleges</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             {colleges.length} institution{colleges.length !== 1 ? "s" : ""} registered on the platform
           </p>

@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { BookOpen, Clock, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { CheckSquare, ArrowRight, ClipboardCheck, Clock, Users } from "lucide-react";
+import { PageHeader, Panel, StatCard, StatusBadge, EmptyState, LoadingState } from "@/components/ui/saas";
 
 export default function GradingDashboard() {
   const [exams, setExams] = useState([]);
@@ -12,69 +11,64 @@ export default function GradingDashboard() {
 
   useEffect(() => {
     fetch("/api/grading/pending")
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) setExams(data.exams);
-        setLoading(false);
-      });
+      .then((res) => res.json())
+      .then((data) => { if (data.success) setExams(data.exams); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return <div className="flex h-96 items-center justify-center">Loading grading tasks...</div>;
-  }
+  const pending = exams.reduce((n, e) => n + e.pendingCount, 0);
+  const total = exams.reduce((n, e) => n + e.totalCount, 0);
+  const sorted = [...exams].sort((a, b) => b.pendingCount - a.pendingCount);
 
   return (
-    <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Grading Dashboard</h1>
-        <p className="text-muted-foreground">Manage and review student submissions.</p>
+    <div className="space-y-8">
+      <PageHeader title="Grading" description="Review submissions and mark written answers. Multiple-choice answers are graded automatically." />
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard icon={Clock} label="Waiting for you" value={pending} hint="Submissions with ungraded written answers" tone="warning" loading={loading} />
+        <StatCard icon={ClipboardCheck} label="Graded" value={total - pending} hint="Results ready for students" tone="success" loading={loading} />
+        <StatCard icon={Users} label="Total submissions" value={total} hint={`Across ${exams.length} exam${exams.length !== 1 ? "s" : ""}`} tone="primary" loading={loading} />
       </div>
 
-      {exams.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center p-12 text-center">
-          <BookOpen className="h-12 w-12 text-muted-foreground mb-4 opacity-20" />
-          <CardTitle>All caught up!</CardTitle>
-          <p className="text-muted-foreground mt-2">No exams currently have pending manual reviews.</p>
-        </Card>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {exams.map((exam) => (
-            <Card key={exam.id} className="hover:shadow-md transition-shadow">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-primary uppercase tracking-wider">{exam.subject}</span>
-                  {exam.pendingCount > 0 && (
-                    <div className="flex items-center text-amber-500 text-[10px] font-black uppercase">
-                      <Clock className="w-3 h-3 mr-1" />
-                      {exam.pendingCount} Review Required
+      <Panel title="Exams with submissions" noPadding>
+        {loading ? (
+          <LoadingState />
+        ) : sorted.length === 0 ? (
+          <EmptyState icon={CheckSquare} title="Nothing to grade yet" description="Submissions appear here once students finish your exams." className="m-5" />
+        ) : (
+          <ul className="divide-y">
+            {sorted.map((exam) => {
+              const pct = exam.totalCount ? Math.round((exam.completedCount / exam.totalCount) * 100) : 0;
+              return (
+                <li key={exam.id}>
+                  <Link href={`/dashboard/teacher/grading/${exam.id}`} className="flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-foreground">{exam.title}</p>
+                      <p className="text-xs text-muted-foreground">{exam.subject}</p>
                     </div>
-                  )}
-                </div>
-                <CardTitle className="text-lg mt-1">{exam.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex justify-between items-center mb-4">
-                  <div className="flex flex-col">
-                    <span className="text-2xl font-black">{exam.totalCount}</span>
-                    <span className="text-[10px] uppercase font-bold opacity-40">Total Submissions</span>
-                  </div>
-                  {exam.completedCount > 0 && (
-                     <div className="text-right">
-                        <span className="text-xs font-bold text-emerald-600">{exam.completedCount} Graded</span>
-                     </div>
-                  )}
-                </div>
-                <Link href={`/dashboard/teacher/grading/${exam.id}`}>
-                  <Button className="w-full justify-between h-11 rounded-xl font-bold" variant="outline">
-                    View Results
-                    <ChevronRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+                    <div className="w-full sm:w-48">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">{exam.completedCount} of {exam.totalCount} graded</span>
+                        <span className="tabular-nums text-muted-foreground">{pct}%</span>
+                      </div>
+                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-success" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 sm:w-40 sm:justify-end">
+                      {exam.pendingCount > 0
+                        ? <StatusBadge tone="warning" dot>{exam.pendingCount} to grade</StatusBadge>
+                        : <StatusBadge tone="success">All graded</StatusBadge>}
+                      <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Panel>
     </div>
   );
 }

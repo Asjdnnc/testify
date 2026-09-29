@@ -1,39 +1,23 @@
 import prisma from "@/lib/prisma.js";
-import { cookies } from "next/headers";
-
-async function requireSuperAdmin() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("testify-token")?.value;
-  if (!token) throw Object.assign(new Error("Unauthorized"), { status: 401 });
-  try {
-    const payload = JSON.parse(
-      Buffer.from(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")
-    );
-    if (payload.role !== "SUPER_ADMIN") throw Object.assign(new Error("Forbidden"), { status: 403 });
-    return payload;
-  } catch (e) {
-    if (e.status) throw e;
-    throw Object.assign(new Error("Invalid token"), { status: 401 });
-  }
-}
+import { requireAuth, errorResponse } from "@/lib/server-auth.js";
 
 // GET /api/super-admin/plans — list all plans
-export async function GET() {
+export async function GET(req) {
   try {
-    await requireSuperAdmin();
+    await requireAuth(req, { roles: ["SUPER_ADMIN"] });
     const plans = await prisma.subscriptionPlan.findMany({
       orderBy: { priceInPaise: "asc" },
     });
     return Response.json({ success: true, plans });
   } catch (err) {
-    return Response.json({ success: false, message: err.message }, { status: err.status || 500 });
+    return errorResponse(err, 500);
   }
 }
 
 // PATCH /api/super-admin/plans — update a plan by planType
 export async function PATCH(req) {
   try {
-    await requireSuperAdmin();
+    await requireAuth(req, { roles: ["SUPER_ADMIN"] });
     const body = await req.json();
     const { planType, ...updates } = body;
 
@@ -54,6 +38,6 @@ export async function PATCH(req) {
 
     return Response.json({ success: true, plan });
   } catch (err) {
-    return Response.json({ success: false, message: err.message }, { status: err.status || 500 });
+    return errorResponse(err, 500);
   }
 }

@@ -126,8 +126,8 @@ export default function ManageTeachersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Users className="w-6 h-6 text-primary" /> Faculty Management
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
+            Teachers
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             {teachers.length} teacher{teachers.length !== 1 ? "s" : ""} on faculty
@@ -159,7 +159,7 @@ export default function ManageTeachersPage() {
         </div>
       )}
       {success && (
-        <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-sm">
+        <div className="flex items-center gap-2 text-success-foreground dark:text-success-foreground bg-emerald-500/10 border border-success/40 rounded-xl p-3 text-sm">
           <CheckCircle2 className="w-4 h-4 shrink-0" /> {success}
         </div>
       )}
@@ -200,7 +200,7 @@ export default function ManageTeachersPage() {
                   className="w-full h-9 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-all flex items-center justify-center gap-1.5"
                 >
                   {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                  Register Teacher
+                  Invite teacher
                 </button>
               </form>
             </div>
@@ -235,7 +235,7 @@ export default function ManageTeachersPage() {
                     <p className="text-xs font-medium text-foreground">
                       {batchFile ? batchFile.name : "Drop file here or click to browse"}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">Supports .xlsx and .csv</p>
+                    <p className="text-xs text-muted-foreground">Supports .xlsx and .csv</p>
                   </div>
                   <input
                     type="file"
@@ -267,19 +267,19 @@ export default function ManageTeachersPage() {
               {batchResult && (
                 <div className="p-3 bg-muted/50 rounded-lg border border-border space-y-2">
                   <p className="text-[11px] font-bold text-foreground">Import Results:</p>
-                  <div className="grid grid-cols-2 gap-2 text-[10px]">
-                    <div className="text-emerald-500">✓ Success: {batchResult.success}</div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="text-success-foreground">✓ Success: {batchResult.success}</div>
                     <div className="text-destructive">✗ Failed: {batchResult.failed}</div>
                   </div>
                   {batchResult.errors.length > 0 && (
-                    <div className="mt-2 max-h-24 overflow-y-auto text-[9px] text-muted-foreground space-y-1">
+                    <div className="mt-2 max-h-24 overflow-y-auto text-[11px] text-muted-foreground space-y-1">
                       {batchResult.errors.slice(0, 5).map((err, i) => (
                         <div key={i} className="flex gap-1">
                           <span className="font-bold shrink-0">[{err.email}]:</span>
                           <span>{err.error}</span>
                         </div>
                       ))}
-                      {batchResult.errors.length > 5 && <div className="italic">+ {batchResult.errors.length - 5} more errors</div>}
+                      {batchResult.errors.length > 5 && <div className="">+ {batchResult.errors.length - 5} more errors</div>}
                     </div>
                   )}
                 </div>
@@ -292,7 +292,7 @@ export default function ManageTeachersPage() {
               <Mail className="w-5 h-5 text-primary shrink-0" />
               <div className="space-y-1">
                 <p className="text-xs font-semibold text-foreground">Auto-Email Invitation</p>
-                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   Registered teachers will receive an email with temporary credentials and a link to set their secure password.
                 </p>
               </div>
@@ -304,7 +304,7 @@ export default function ManageTeachersPage() {
         {/* Right Column: Faculty list */}
         <div className="lg:col-span-2 bg-card border rounded-2xl overflow-hidden flex flex-col h-fit">
           <div className="px-5 py-4 border-b flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-foreground">Faculty Directory</h2>
+            <h2 className="text-sm font-semibold text-foreground">All teachers</h2>
             <div className="relative flex-1 max-w-xs">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <input

@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { GraduationCap, Award, BookOpen, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { GraduationCap, Award, BarChart3, CheckCircle2 } from "lucide-react";
+import {
+  PageHeader, Panel, StatCard, StatusBadge, EmptyState, LoadingState, GRADING_STATUS_TONE,
+} from "@/components/ui/saas";
 
 export default function StudentResults() {
   const [summary, setSummary] = useState(null);
@@ -11,120 +12,103 @@ export default function StudentResults() {
 
   useEffect(() => {
     fetch("/api/student/results")
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) setSummary(data.summary);
-        setLoading(false);
-      });
+      .then((res) => res.json())
+      .then((data) => { if (data.success) setSummary(data.summary); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="p-12 text-center">Loading academic history...</div>;
-
-  const latestGPA = summary?.gpaBySemester?.[0]?.gpa || "0.00";
+  const results = summary?.results || [];
+  const semesters = summary?.gpaBySemester || [];
+  const graded = results.filter((r) => r.gradingStatus !== "MANUAL_REVIEW_PENDING");
+  const passed = graded.filter((r) => r.isPassed).length;
+  const avg = graded.length ? Math.round(graded.reduce((s, r) => s + (r.percentage || 0), 0) / graded.length) : null;
+  const latestGPA = semesters[0]?.gpa ?? "—";
+  const cgpa = summary?.cgpa ?? "—";
 
   return (
-    <div className="p-6 space-y-8 max-w-6xl mx-auto">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-           <h1 className="text-3xl font-bold tracking-tight">Academic Performance</h1>
-           <p className="text-muted-foreground mt-1 text-lg">Your semester-wise results and aggregate GPA.</p>
+    <div className="space-y-8">
+      <PageHeader title="Results" description="Your exam scores and GPA (4.0 scale: 90%+ = 4.0, 80% = 3.0, 70% = 2.0, 60% = 1.0)." />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={GraduationCap} label="Semester GPA" value={latestGPA} hint={semesters[0] ? `Semester ${semesters[0].semester} · CGPA ${cgpa}` : "No graded exams yet"} tone="primary" loading={loading} />
+        <StatCard icon={BarChart3} label="Average score" value={avg != null ? `${avg}%` : "—"} hint="Graded exams" tone="info" loading={loading} />
+        <StatCard icon={CheckCircle2} label="Passed" value={`${passed} / ${graded.length}`} hint="Graded exams" tone="success" loading={loading} />
+        <StatCard icon={Award} label="Awaiting review" value={results.length - graded.length} hint="Written answers being marked" tone="warning" loading={loading} />
+      </div>
+
+      {semesters.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {semesters.map((g) => (
+            <Panel
+              key={g.semester}
+              title={`Semester ${g.semester}`}
+              actions={<span className="text-xl font-semibold tabular-nums text-primary">{g.gpa}</span>}
+            >
+              <ul className="space-y-2.5">
+                {g.breakDown.map((sub, idx) => (
+                  <li key={idx} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0">
+                      <span className="block truncate text-foreground">{sub.subject}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{sub.credits} credits · {sub.examTitle}</span>
+                    </span>
+                    <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs font-medium tabular-nums text-foreground">GP {sub.gradePoint}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 border-t pt-3 text-xs text-muted-foreground">{g.totalCredits} credits · best graded exam per subject counts</p>
+            </Panel>
+          ))}
         </div>
-        <Card className="bg-primary text-primary-foreground min-w-[240px]">
-           <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                 <div className="space-y-1">
-                    <p className="text-xs font-semibold uppercase tracking-wider opacity-80">Current GPA</p>
-                    <p className="text-4xl font-black">{latestGPA}</p>
-                 </div>
-                 <div className="bg-white/20 p-3 rounded-xl border border-white/30">
-                    <GraduationCap className="h-8 w-8 text-white" />
-                 </div>
-              </div>
-           </CardContent>
-        </Card>
-      </header>
+      )}
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-         {summary?.gpaBySemester?.map((gpaData) => (
-           <Card key={gpaData.semester} className="hover:border-primary transition-colors">
-              <CardHeader className="bg-secondary/20 border-b">
-                 <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">Semester {gpaData.semester}</CardTitle>
-                    <span className="text-2xl font-bold text-primary">{gpaData.gpa}</span>
-                 </div>
-              </CardHeader>
-              <CardContent className="pt-4">
-                 <div className="space-y-3">
-                    {gpaData.breakDown.map((sub, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-sm">
-                         <span className="text-muted-foreground">{sub.subject}</span>
-                         <span className="font-semibold text-xs bg-secondary px-2 py-0.5 rounded italic">GP {sub.gradePoint}</span>
-                      </div>
-                    ))}
-                    <div className="pt-3 border-t flex justify-between text-xs font-medium uppercase tracking-tighter text-muted-foreground">
-                       <span>Total Credits: {gpaData.totalCredits}</span>
-                       <span>Status: Regular</span>
-                    </div>
-                 </div>
-              </CardContent>
-           </Card>
-         ))}
-      </div>
-
-      <div className="space-y-4">
-         <h2 className="text-xl font-bold flex items-center gap-2">
-            <Award className="w-5 h-5 text-primary" /> Recent Exam Results
-         </h2>
-         <Card>
-            <Table>
-               <TableHeader>
-                  <TableRow>
-                     <TableHead>Exam Title</TableHead>
-                     <TableHead>Subject</TableHead>
-                     <TableHead>Score</TableHead>
-                     <TableHead>Percentage</TableHead>
-                     <TableHead>Status</TableHead>
-                     <TableHead>Result</TableHead>
-                  </TableRow>
-               </TableHeader>
-               <TableBody>
-                  {summary?.results?.map((res) => (
-                    <TableRow key={res.id}>
-                       <TableCell className="font-medium">{res.exam.title}</TableCell>
-                       <TableCell className="text-muted-foreground">{res.exam.subject.name}</TableCell>
-                       <TableCell>
-                          <span className="font-semibold">{res.totalMarksObtained}</span>
-                          <span className="text-xs text-muted-foreground ml-1">/ {res.exam.totalMarks}</span>
-                       </TableCell>
-                       <TableCell>{res.percentage.toFixed(1)}%</TableCell>
-                       <TableCell>
-                          <StatusBadge status={res.gradingStatus} />
-                       </TableCell>
-                       <TableCell>
-                          {res.isPassed === true && <span className="text-emerald-500 font-bold">Pass</span>}
-                          {res.isPassed === false && <span className="text-red-500 font-bold">Fail</span>}
-                          {res.isPassed === null && <span className="text-muted-foreground">--</span>}
-                       </TableCell>
-                    </TableRow>
-                  ))}
-                  {(!summary?.results || summary.results.length === 0) && (
-                    <TableRow>
-                       <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                          No exam results found yet.
-                       </TableCell>
-                    </TableRow>
-                  )}
-               </TableBody>
-            </Table>
-         </Card>
-      </div>
+      <Panel title="Exam results" noPadding>
+        {loading ? (
+          <LoadingState />
+        ) : results.length === 0 ? (
+          <EmptyState icon={Award} title="No results yet" description="Your scores will appear here after you submit an exam." className="m-5" />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-5 py-3 font-medium">Exam</th>
+                  <th className="px-5 py-3 font-medium">Subject</th>
+                  <th className="px-5 py-3 font-medium text-right">Score</th>
+                  <th className="px-5 py-3 font-medium text-right">%</th>
+                  <th className="px-5 py-3 font-medium">Status</th>
+                  <th className="px-5 py-3 font-medium">Result</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {results.map((r) => {
+                  const pending = r.gradingStatus === "MANUAL_REVIEW_PENDING";
+                  return (
+                    <tr key={r.id} className="hover:bg-muted/30">
+                      <td className="px-5 py-3 font-medium text-foreground">{r.exam.title}</td>
+                      <td className="px-5 py-3 text-muted-foreground">{r.exam.subject.name}</td>
+                      <td className="px-5 py-3 text-right tabular-nums text-foreground">
+                        {r.totalMarksObtained}<span className="text-muted-foreground"> / {r.exam.totalMarks}</span>
+                      </td>
+                      <td className="px-5 py-3 text-right tabular-nums text-foreground">{(r.percentage ?? 0).toFixed(1)}</td>
+                      <td className="px-5 py-3">
+                        <StatusBadge tone={GRADING_STATUS_TONE[r.gradingStatus]}>{pending ? "Awaiting review" : "Released"}</StatusBadge>
+                      </td>
+                      <td className="px-5 py-3">
+                        {pending || r.isPassed == null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <StatusBadge tone={r.isPassed ? "success" : "danger"}>{r.isPassed ? "Pass" : "Fail"}</StatusBadge>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
     </div>
   );
-}
-
-function StatusBadge({ status }) {
-  if (status === "MANUAL_REVIEW_PENDING") {
-    return <span className="flex items-center text-amber-500 text-xs gap-1 font-medium"><Clock className="w-3 h-3"/> Pending</span>;
-  }
-  return <span className="flex items-center text-emerald-500 text-xs gap-1 font-medium"><CheckCircle2 className="w-3 h-3"/> Released</span>;
 }

@@ -1,37 +1,26 @@
 import { createDraftExam, getExamsByCreator } from "@/lib/services/exam.service.js";
-import { cookies } from "next/headers";
+import { requireAuth, errorResponse } from "@/lib/server-auth.js";
 
-async function extractUserId() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("testify-token")?.value;
-  if (!token) return null;
+export async function GET(req) {
   try {
-    return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).userId;
-  } catch(e) { return null; }
-}
+    const auth = await requireAuth(req, { roles: ["TEACHER", "ADMIN"], subscription: true });
 
-export async function GET() {
-  try {
-    const teacherId = await extractUserId();
-    if (!teacherId) return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
-
-    const exams = await getExamsByCreator(teacherId);
+    const exams = await getExamsByCreator(auth.userId);
     return Response.json({ success: true, exams }, { status: 200 });
   } catch (error) {
-    return Response.json({ success: false, message: error.message }, { status: 400 });
+    return errorResponse(error);
   }
 }
 
 export async function POST(req) {
   try {
-    const teacherId = await extractUserId();
-    if (!teacherId) return Response.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    const auth = await requireAuth(req, { roles: ["TEACHER", "ADMIN"], subscription: true });
 
     const body = await req.json();
-    const exam = await createDraftExam(teacherId, body);
-    
+    const exam = await createDraftExam(auth.userId, { ...body, collegeId: auth.collegeId });
+
     return Response.json({ success: true, exam }, { status: 201 });
   } catch (error) {
-    return Response.json({ success: false, message: error.message }, { status: 400 });
+    return errorResponse(error);
   }
 }

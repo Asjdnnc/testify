@@ -2,16 +2,62 @@ import prisma from "../prisma.js";
 import bcrypt from "bcrypt";
 import { checkResourceLimit } from "./subscription.service.js";
 import { safeQuery } from "../db-retry.js";
+import { randomInt } from "crypto";
+import { sendTeacherWelcomeEmail } from "../email.js";
+
+const TRIAL_DAYS = 3;
+
+function httpError(status, message) {
+  return Object.assign(new Error(message), { status });
+}
+
+// --- Tenant guards ---
+// collegeId === null means "platform scope" (SUPER_ADMIN); otherwise the
+// record must belong to that college or we pretend it doesn't exist.
+async function assertBranchInCollege(branchId, collegeId) {
+  const branch = await prisma.branch.findUnique({ where: { id: branchId }, select: { id: true, collegeId: true } });
+  if (!branch || (collegeId && branch.collegeId !== collegeId)) throw httpError(404, "Branch not found");
+  return branch;
+}
+
+async function assertBatchInCollege(batchId, collegeId) {
+  const batch = await prisma.batch.findUnique({
+    where: { id: batchId },
+    select: { id: true, branchId: true, branch: { select: { collegeId: true } } }
+  });
+  if (!batch || (collegeId && batch.branch.collegeId !== collegeId)) throw httpError(404, "Batch not found");
+  return batch;
+}
+
+async function assertSubjectInCollege(subjectId, collegeId) {
+  const subject = await prisma.subject.findUnique({ where: { id: subjectId }, select: { id: true, collegeId: true } });
+  if (!subject || (collegeId && subject.collegeId !== collegeId)) throw httpError(404, "Subject not found");
+  return subject;
+}
+
+function devLogCredentials(role, email, password) {
+  // Free-tier Resend may suppress emails in development, so show creds locally.
+  // NEVER log plaintext passwords in production.
+  if (process.env.NODE_ENV === "production") return;
+  console.log(`\n========================================`);
+  console.log(`👤 NEW ${role} REGISTERED (dev only)`);
+  console.log(`📧 Email: ${email}`);
+  console.log(`🔑 Temp Password: ${password}`);
+  console.log(`========================================\n`);
+}
 
 // --- College ---
 export async function createCollege({ name, address }) {
   if (!name) throw new Error("College name is required");
 
-  // Create college
+  // Create college (starts on the standard trial like self-onboarded colleges)
   const college = await prisma.college.create({
     data: {
       name,
       address,
+      subscriptionStatus: "TRIAL",
+      planType: "TRIAL",
+      trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
     },
   });
 
@@ -62,48 +108,60 @@ export async function getUsersByCollege(collegeId, role) {
   });
 }
 
-export async function getUsersByBatch(batchId) {
+export async function getUsersByBatch(batchId, collegeId) {
   return prisma.user.findMany({
-    where: { batchId, role: "STUDENT" },
+    where: { batchId, role: "STUDENT", collegeId },
     select: { id: true, name: true, email: true, createdAt: true }
   });
 }
 
 /**
- * Generates a random 10-character alphanumeric password.
+ * Generates a random 12-character password using a CSPRNG.
  */
 function generateRandomPassword() {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%";
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
   let password = "";
-  for (let i = 0; i < 10; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (let i = 0; i < 12; i++) {
+    password += chars.charAt(randomInt(chars.length));
   }
   return password;
 }
 
-import { sendTeacherWelcomeEmail } from "../email.js";
-
 export async function createUserForCollege(collegeId, { name, email, password, role, batchId, branchId }) {
-  if (!name || !email || !role) throw new Error("Missing required user data");
+  if (!name || !email || !role || !collegeId) throw new Error("Missing required user data");
+
+  const normalizedRole = role.toUpperCase();
+  if (!["ADMIN", "TEACHER", "STUDENT"].includes(normalizedRole)) throw new Error("Invalid role");
+
+  const college = await prisma.college.findUnique({ where: { id: collegeId }, select: { id: true, deletedAt: true } });
+  if (!college || college.deletedAt) throw new Error("College not found");
   
   const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) throw new Error("User with this email already exists");
 
+  // Tenant isolation: branch/batch must live in this college (and match each other)
+  if (branchId) await assertBranchInCollege(branchId, collegeId);
+  if (batchId) {
+    const batch = await assertBatchInCollege(batchId, collegeId);
+    if (branchId && batch.branchId !== branchId) throw new Error("Batch does not belong to the selected branch");
+    branchId = branchId || batch.branchId;
+  }
+  if (normalizedRole === "STUDENT" && !batchId) throw new Error("Students must be assigned to a batch");
+
   // Enforce plan limits for TEACHER and STUDENT roles
-  const normalizedRole = role.toUpperCase();
   if (normalizedRole === "TEACHER") await checkResourceLimit(collegeId, "teachers");
   if (normalizedRole === "STUDENT") await checkResourceLimit(collegeId, "students");
 
   let finalPassword = password;
   let requirePasswordChange = false;
 
-  // If no password provided for a teacher, generate one and trigger invitation email
-  if (!finalPassword && normalizedRole === "TEACHER") {
+  // If no password provided, generate one and trigger invitation email
+  if (!finalPassword) {
     finalPassword = generateRandomPassword();
     requirePasswordChange = true;
   }
 
-  if (!finalPassword) throw new Error("Password is required for this account type");
+  if (finalPassword.length < 8) throw new Error("Password must be at least 8 characters");
 
   const hashedPassword = await bcrypt.hash(finalPassword, 10);
   
@@ -124,25 +182,19 @@ export async function createUserForCollege(collegeId, { name, email, password, r
   });
 
   // If we generated a password, send the welcome email
-  if (requirePasswordChange && (normalizedRole === "TEACHER" || normalizedRole === "STUDENT")) {
-    const college = await safeQuery(() => prisma.college.findUnique({ 
+  if (requirePasswordChange) {
+    const collegeRow = await safeQuery(() => prisma.college.findUnique({ 
       where: { id: collegeId },
       select: { name: true }
     }));
-    
-    // --- DEVELOPMENT LOGGING ---
-    // Outputting credentials to terminal since free-tier Resend suppresses unverified emails
-    console.log(`\n========================================`);
-    console.log(`👤 NEW ${normalizedRole} REGISTERED`);
-    console.log(`📧 Email: ${email}`);
-    console.log(`🔑 Temp Password: ${finalPassword}`);
-    console.log(`========================================\n`);
+
+    devLogCredentials(normalizedRole, email, finalPassword);
 
     await sendTeacherWelcomeEmail({
       to: email,
       name,
       tempPassword: finalPassword,
-      collegeName: college?.name || "Your Institution"
+      collegeName: collegeRow?.name || "Your Institution"
     }).catch(err => console.error("[EMAIL_ERROR] Failed to send single user invite:", err.message));
   }
 
@@ -202,13 +254,15 @@ export async function createTeachersBatch(collegeId, teachersList) {
         }
       });
 
-      // Send email
+      devLogCredentials("TEACHER", t.email, tempPassword);
+
+      // Send email (the account exists at this point, so an email failure is not a row failure)
       await sendTeacherWelcomeEmail({
         to: t.email,
         name: t.name,
         tempPassword,
         collegeName: college?.name || "Your Institution"
-      });
+      }).catch(err => console.error(`[EMAIL_ERROR] ${t.email}:`, err.message));
 
       results.success++;
     } catch (err) {
@@ -295,13 +349,15 @@ export async function createStudentsBatch(collegeId, studentsList) {
         }
       });
 
-      // Send email
+      devLogCredentials("STUDENT", s.email, tempPassword);
+
+      // Send email (the account exists at this point, so an email failure is not a row failure)
       await sendTeacherWelcomeEmail({
         to: s.email,
         name: s.name,
         tempPassword,
         collegeName: college?.name || "Your Institution"
-      });
+      }).catch(err => console.error(`[EMAIL_ERROR] ${s.email}:`, err.message));
 
       results.success++;
     } catch (err) {
@@ -397,7 +453,7 @@ export async function createBranch({ name, collegeId, batchYears = [] }) {
         create: batchYears.map(year => ({
           name: `${year}`,
           graduationYear: parseInt(year, 10)
-        }))
+        })).filter(b => !Number.isNaN(b.graduationYear))
       }
     },
     include: { batches: true }
@@ -421,14 +477,14 @@ export async function getBranchesByCollege(collegeId) {
 }
 
 // --- Batch ---
-export async function createBatch({ name, graduationYear, branchId }) {
+export async function createBatch({ name, graduationYear, branchId, collegeId = null }) {
   if (!name || !graduationYear || !branchId) {
     throw new Error("Batch name, graduationYear, and branchId are required");
   }
+  if (Number.isNaN(parseInt(graduationYear, 10))) throw new Error("graduationYear must be a number");
 
-  // Check if branch exists
-  const branchExists = await prisma.branch.findUnique({ where: { id: branchId }, select: { id: true, collegeId: true } });
-  if (!branchExists) throw new Error("Invalid branchId");
+  // Check the branch exists and belongs to the caller's college
+  await assertBranchInCollege(branchId, collegeId);
 
   // Batches are unlimited on all plans — no limit check needed
 
@@ -456,7 +512,8 @@ export async function createBatch({ name, graduationYear, branchId }) {
   return batch;
 }
 
-export async function getBatchesByBranch(branchId) {
+export async function getBatchesByBranch(branchId, collegeId = null) {
+  await assertBranchInCollege(branchId, collegeId);
   return prisma.batch.findMany({
     where: { branchId },
     select: {
@@ -548,18 +605,27 @@ export async function getSubjectsByCollege(collegeId) {
   });
 }
 
-export async function updateSubject(id, { name, code, credits }) {
+export async function updateSubject(id, collegeId, { name, code, credits }) {
+  await assertSubjectInCollege(id, collegeId);
   return prisma.subject.update({
     where: { id },
     data: { 
-      name,
+      name: name || undefined,
       code: code !== undefined ? (code || null) : undefined,
-      credits: credits !== undefined ? parseInt(credits, 10) : undefined,
+      credits: credits !== undefined && !Number.isNaN(parseInt(credits, 10)) ? parseInt(credits, 10) : undefined,
     }
   });
 }
 
-export async function deleteSubject(id) {
+export async function deleteSubject(id, collegeId) {
+  await assertSubjectInCollege(id, collegeId);
+  const [examCount, questionCount] = await Promise.all([
+    prisma.exam.count({ where: { subjectId: id } }),
+    prisma.question.count({ where: { subjectId: id } }),
+  ]);
+  if (examCount > 0 || questionCount > 0) {
+    throw new Error("This subject still has exams or questions attached. Remove them first.");
+  }
   return prisma.subject.delete({
     where: { id }
   });
@@ -575,26 +641,29 @@ export async function deleteUser(userId, adminCollegeId) {
 }
 
 // --- Update Branch ---
-export async function updateBranch(id, { name }) {
+export async function updateBranch(id, collegeId, { name }) {
   if (!name) throw new Error("Branch name is required");
+  await assertBranchInCollege(id, collegeId);
   return prisma.branch.update({ where: { id }, data: { name } });
 }
 
 // --- Delete Branch ---
-export async function deleteBranch(id) {
+export async function deleteBranch(id, collegeId) {
+  await assertBranchInCollege(id, collegeId);
   return prisma.branch.delete({ where: { id } });
 }
 
 // --- Update Batch ---
-export async function updateBatch(id, { name, graduationYear }) {
+export async function updateBatch(id, collegeId, { name, graduationYear }) {
+  await assertBatchInCollege(id, collegeId);
   const data = {};
   if (name) data.name = name;
-  if (graduationYear) data.graduationYear = parseInt(graduationYear, 10);
+  if (graduationYear && !Number.isNaN(parseInt(graduationYear, 10))) data.graduationYear = parseInt(graduationYear, 10);
   return prisma.batch.update({ where: { id }, data });
 }
 
 // --- Delete Batch ---
-export async function deleteBatch(id) {
+export async function deleteBatch(id, collegeId) {
+  await assertBatchInCollege(id, collegeId);
   return prisma.batch.delete({ where: { id } });
 }
-
